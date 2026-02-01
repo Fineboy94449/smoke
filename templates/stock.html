@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <title>Stock Manager - SmokeTrack</title>
+    <style>
+        body { background-color: #1a1a1a; color: #e0e0e0; }
+        .card { background-color: #252525; border-color: #3d3d3d; }
+        .navbar { background-color: #1f1f1f !important; border-bottom: 2px solid #3d3d3d; }
+        .stat-card {
+            background: linear-gradient(135deg, #2d2d2d 0%, #1f1f1f 100%);
+            border: 1px solid #3d3d3d;
+            transition: transform 0.2s;
+        }
+        .stat-card:hover { transform: translateY(-4px); }
+        .form-control, .form-control:focus, .form-select, .form-select:focus {
+            background-color: #2d2d2d;
+            border-color: #4d4d4d;
+            color: #e0e0e0;
+        }
+        .form-control:focus, .form-select:focus {
+            box-shadow: 0 0 0 0.2rem rgba(255,193,7,0.25);
+            border-color: #ffc107;
+        }
+        .month-block {
+            background-color: #2d2d2d;
+            border: 1px solid #3d3d3d;
+            border-radius: 10px;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+        .month-header {
+            padding: 14px 18px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.2s;
+        }
+        .month-header:hover { background-color: #353535; }
+        .month-body { padding: 0 18px 14px; display: none; }
+        .month-body.open { display: block; }
+        .stock-entry {
+            background-color: #1f1f1f;
+            border: 1px solid #3d3d3d;
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: border-color 0.2s;
+        }
+        .stock-entry:hover { border-color: #ffc107; }
+        .stock-warning { background-color: #3d2a1a; border-color: #e67e22; color: #f39c12; }
+        .stock-danger { background-color: #3d1f1f; border-color: #dc3545; color: #ff6b6b; }
+        .delete-btn { opacity: 0.6; transition: opacity 0.2s; }
+        .delete-btn:hover { opacity: 1; }
+        .progress { background-color: #1a1a1a; height: 12px; border-radius: 6px; }
+        .progress-bar { border-radius: 6px; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark">
+        <div class="container-fluid">
+            <a href="/" class="navbar-brand">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+            <span class="navbar-text text-white">
+                <i class="fas fa-boxes"></i> Stock Manager
+            </span>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+
+        <!-- ADD STOCK FORM -->
+        <div class="card shadow-sm mb-4" style="border: 2px solid #ffc107;">
+            <div class="card-header" style="background-color: #3d3520; border-color: #ffc107;">
+                <h5 class="mb-0 text-warning"><i class="fas fa-plus-circle"></i> Add New Stock Purchase</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label text-muted">Date of Purchase</label>
+                        <input type="date" id="stockDate" class="form-control form-control-lg">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label text-muted">Bundles Bought</label>
+                        <input type="number" id="stockBundles" class="form-control form-control-lg" 
+                               placeholder="9" min="1" max="999">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label text-muted">Total Cost (R)</label>
+                        <input type="text" id="stockCostDisplay" class="form-control form-control-lg" 
+                               placeholder="R0.00" disabled>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-muted">Note (optional)</label>
+                        <input type="text" id="stockNote" class="form-control form-control-lg" 
+                               placeholder="e.g. bought from wholesaler">
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-warning btn-lg w-100" onclick="addStock()">
+                            <i class="fas fa-plus"></i> Add Stock
+                        </button>
+                    </div>
+                </div>
+                <div class="mt-2 text-muted small">
+                    <i class="fas fa-info-circle"></i> 
+                    1 bundle = {{ sticks_per_bundle }} sticks | Cost per bundle = R{{ bundle_cost }}
+                </div>
+            </div>
+        </div>
+
+        <!-- STOCK OVERVIEW CARDS -->
+        <div class="row text-center mb-4">
+            <div class="col-md-3">
+                <div class="card p-3 stat-card">
+                    <h6 class="text-muted"><i class="fas fa-layer-group"></i> Total Bundles</h6>
+                    <h2 class="text-warning">{{ total_bundles }}</h2>
+                    <small class="text-muted">{{ total_bundles }} bundles bought</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3 stat-card">
+                    <h6 class="text-muted"><i class="fas fa-dollar-sign"></i> Total Spent</h6>
+                    <h2 class="text-danger">R{{ "%.2f"|format(total_spent) }}</h2>
+                    <small class="text-muted">on stock purchases</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3 stat-card">
+                    <h6 class="text-muted"><i class="fas fa-cigarette"></i> Sticks in Stock</h6>
+                    <h2 class="{% if sticks_remaining <= 0 %}text-danger{% elif sticks_remaining < 200 %}text-warning{% else %}text-success{% endif %}">
+                        {{ sticks_remaining }}
+                    </h2>
+                    <small class="text-muted">{{ total_sticks_from_stock }} bought - {{ total_sticks_sold }} sold</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3 stat-card">
+                    <h6 class="text-muted"><i class="fas fa-chart-pie"></i> Bundles Left</h6>
+                    <h2 class="{% if sticks_remaining <= 0 %}text-danger{% elif sticks_remaining < 200 %}text-warning{% else %}text-success{% endif %}">
+                        {{ "%.1f"|format(sticks_remaining / sticks_per_bundle) if sticks_remaining > 0 else '0' }}
+                    </h2>
+                    <small class="text-muted">equivalent bundles remaining</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- STOCK LEVEL BAR -->
+        {% if total_sticks_from_stock > 0 %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-1">
+                    <strong>Stock Level</strong>
+                    <span class="text-muted">{{ sticks_remaining }} / {{ total_sticks_from_stock }} sticks</span>
+                </div>
+                <div class="progress">
+                    {% set pct = (sticks_remaining / total_sticks_from_stock * 100) if total_sticks_from_stock > 0 else 0 %}
+                    <div class="progress-bar 
+                        {% if pct <= 20 %}bg-danger{% elif pct <= 50 %}bg-warning{% else %}bg-success{% endif %}" 
+                        role="progressbar" style="width: {{ pct }}%">
+                        {{ "%.0f"|format(pct) }}%
+                    </div>
+                </div>
+                {% if sticks_remaining <= 0 %}
+                <div class="alert alert-danger mt-3 mb-0">
+                    <i class="fas fa-exclamation-triangle"></i> <strong>OUT OF STOCK!</strong> You need to buy more bundles before selling.
+                </div>
+                {% elif sticks_remaining < 200 %}
+                <div class="alert alert-warning mt-3 mb-0" style="background-color:#3d3520; border-color:#ffc107; color:#f39c12;">
+                    <i class="fas fa-exclamation-circle"></i> <strong>LOW STOCK!</strong> Less than 1 bundle remaining. Consider restocking.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- MONTHLY BREAKDOWN -->
+        <div class="card shadow-sm">
+            <div class="card-header" style="background-color: #2d2d2d; border-color: #3d3d3d;">
+                <h5 class="mb-0"><i class="fas fa-calendar-alt"></i> Monthly Purchases</h5>
+            </div>
+            <div class="card-body">
+                {% if monthly %}
+                    {% for month, data in monthly.items() %}
+                    <div class="month-block">
+                        <div class="month-header" onclick="toggleMonth('{{ month | replace(' ', '_') }}')">
+                            <div>
+                                <strong style="font-size: 1.1rem;">{{ month }}</strong>
+                                <span class="text-muted ms-2">— {{ data.bundles }} bundle{{ 's' if data.bundles > 1 else '' }}</span>
+                            </div>
+                            <div class="text-end">
+                                <strong class="text-warning">R{{ "%.2f"|format(data.cost) }}</strong>
+                                <span class="text-muted ms-2">{{ data.bundles * sticks_per_bundle }} sticks</span>
+                                <i class="fas fa-chevron-down ms-2" id="chevron_{{ month | replace(' ', '_') }}"></i>
+                            </div>
+                        </div>
+                        <div class="month-body" id="month_{{ month | replace(' ', '_') }}">
+                            {% for entry in data.entries %}
+                            <div class="stock-entry">
+                                <div>
+                                    <strong>{{ entry.date.strftime('%d %B %Y') }}</strong>
+                                    <span class="badge bg-warning text-dark ms-2">{{ entry.bundles }} bundle{{ 's' if entry.bundles > 1 else '' }}</span>
+                                    <span class="badge bg-info text-dark ms-1">{{ entry.sticks }} sticks</span>
+                                    {% if entry.note %}
+                                    <br><small class="text-muted"><i class="fas fa-sticky-note"></i> {{ entry.note }}</small>
+                                    {% endif %}
+                                </div>
+                                <div class="text-end d-flex align-items-center gap-3">
+                                    <strong class="text-warning">R{{ "%.2f"|format(entry.cost) }}</strong>
+                                    <button class="btn btn-sm btn-danger delete-btn" onclick="deleteStock('{{ entry.id }}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-boxes fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No Stock Purchases Yet</h5>
+                    <p class="text-muted">Add your first bundle purchase above before you start selling.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="text-center mt-4 mb-4">
+            <a href="/" class="btn btn-primary btn-lg">
+                <i class="fas fa-home"></i> Return to Dashboard
+            </a>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Set today's date as default
+        document.getElementById('stockDate').valueAsDate = new Date();
+
+        // Auto-calculate cost when bundles change
+        document.getElementById('stockBundles').addEventListener('input', function() {
+            const bundles = parseInt(this.value) || 0;
+            const cost = bundles * 145.00;
+            
+            document.getElementById('stockCostDisplay').value = 'R' + cost.toFixed(2);
+        });
+
+        function addStock() {
+            const bundles = parseInt(document.getElementById('stockBundles').value);
+            const date = document.getElementById('stockDate').value;
+            const note = document.getElementById('stockNote').value.trim();
+
+            if (!bundles || bundles < 1) {
+                alert('Please enter how many bundles you bought!');
+                document.getElementById('stockBundles').focus();
+                return;
+            }
+            if (!date) {
+                alert('Please select the purchase date!');
+                document.getElementById('stockDate').focus();
+                return;
+            }
+
+            fetch('/stock/add', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    bundles: bundles,
+                    date: date,
+                    note: note
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert(`✓ Added ${data.bundles} bundle(s)!\n${data.sticks} sticks | Cost: R${data.cost.toFixed(2)}`);
+                    location.reload();
+                }
+            })
+            .catch(error => alert('Error: ' + error));
+        }
+
+        function deleteStock(stockId) {
+            if (!confirm('Delete this stock entry? This cannot be undone.')) return;
+
+            fetch('/stock/delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ stock_id: stockId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('✓ Stock entry deleted.');
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => alert('Error: ' + error));
+        }
+
+        function toggleMonth(key) {
+            const body = document.getElementById('month_' + key);
+            const chevron = document.getElementById('chevron_' + key);
+            body.classList.toggle('open');
+            chevron.classList.toggle('fa-chevron-down');
+            chevron.classList.toggle('fa-chevron-up');
+        }
+    </script>
+</body>
+</html>

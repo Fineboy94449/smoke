@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <title>Sales History - SmokeTrack</title>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .transaction-row {
+            transition: background-color 0.2s;
+        }
+        .transaction-row:hover {
+            background-color: #2d2d2d;
+        }
+        .cash-badge {
+            background-color: #28a745;
+        }
+        .credit-badge {
+            background-color: #ffc107;
+        }
+        .loose-badge {
+            background-color: #17a2b8;
+        }
+        .pack-badge {
+            background-color: #6f42c1;
+        }
+        .card {
+            background-color: #252525;
+            border-color: #3d3d3d;
+        }
+        .table {
+            color: #e0e0e0;
+        }
+        .table-light {
+            background-color: #2d2d2d !important;
+            color: #e0e0e0 !important;
+        }
+        .navbar {
+            background-color: #1f1f1f !important;
+            border-bottom: 2px solid #3d3d3d;
+        }
+        .delete-btn {
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        .delete-btn:hover {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark">
+        <div class="container-fluid">
+            <a href="/" class="navbar-brand">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+            <span class="navbar-text text-white">
+                <i class="fas fa-history"></i> Sales History
+            </span>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-list"></i> Recent Transactions (Last 50)</h5>
+            </div>
+            <div class="card-body p-0">
+                {% if sales %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date & Time</th>
+                                <th>Customer</th>
+                                <th>Item</th>
+                                <th>Qty</th>
+                                <th>Method</th>
+                                <th>Price</th>
+                                <th>Profit</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sale in sales %}
+                            <tr class="transaction-row">
+                                <td>
+                                    <small>
+                                        <i class="fas fa-clock"></i>
+                                        {{ sale.timestamp.strftime('%d %b %Y') }}<br>
+                                        {{ sale.timestamp.strftime('%I:%M %p') }}
+                                    </small>
+                                </td>
+                                <td>
+                                    <strong>{{ sale.customer }}</strong>
+                                </td>
+                                <td>
+                                    <span class="badge {% if sale.item_type == 'loose' %}loose-badge{% else %}pack-badge{% endif %}">
+                                        {% if sale.item_type == 'loose' %}
+                                            <i class="fas fa-cigarette"></i> Loose
+                                        {% else %}
+                                            <i class="fas fa-box"></i> Pack
+                                        {% endif %}
+                                    </span>
+                                </td>
+                                <td>{{ sale.qty }}</td>
+                                <td>
+                                    <span class="badge {% if sale.method == 'cash' %}cash-badge{% else %}credit-badge{% endif %}">
+                                        {% if sale.method == 'cash' %}
+                                            <i class="fas fa-money-bill"></i> Cash
+                                        {% else %}
+                                            <i class="fas fa-credit-card"></i> Credit
+                                        {% endif %}
+                                    </span>
+                                </td>
+                                <td><strong>R{{ "%.2f"|format(sale.price) }}</strong></td>
+                                <td class="text-success">
+                                    <strong>R{{ "%.2f"|format(sale.price - (sale.qty * 0.72)) }}</strong>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-danger delete-btn" 
+                                            onclick="deleteTransaction('{{ sale.id }}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                    <h4 class="text-muted">No Sales Yet</h4>
+                    <p class="text-muted">Start selling to see transaction history here.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Quick Stats -->
+        {% if sales %}
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h6 class="text-muted">Total Transactions</h6>
+                        <h3>{{ sales|length }}</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h6 class="text-muted">Most Recent Sale</h6>
+                        <h3>R{{ "%.2f"|format(sales[0].price) }}</h3>
+                        <small class="text-muted">{{ sales[0].customer }}</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h6 class="text-muted">Average Sale</h6>
+                        <h3>R{{ "%.2f"|format(sales|sum(attribute='price') / sales|length) }}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="text-center mt-4 mb-4">
+            <a href="/" class="btn btn-primary btn-lg">
+                <i class="fas fa-home"></i> Return to Dashboard
+            </a>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function deleteTransaction(transactionId) {
+            if (!confirm('Are you sure you want to delete this transaction? This will also reverse any credit applied.')) {
+                return;
+            }
+            
+            fetch('/delete-transaction', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({transaction_id: transactionId})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    alert('✓ Transaction deleted successfully!');
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('Error deleting transaction: ' + error);
+            });
+        }
+    </script>
+</body>
+</html>

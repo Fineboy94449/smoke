@@ -1,0 +1,9 @@
+.venv/
+venv/
+__pycache__/
+serviceAccountKey.json
+.env
+*.pyc
+*.pyo
+.DS_Store
+Thumbs.db

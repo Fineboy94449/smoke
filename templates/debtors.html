@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <title>Debtor Management - SmokeTrack</title>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .debtor-card {
+            transition: all 0.3s;
+            border-left: 5px solid #dc3545;
+            background-color: #252525;
+            border-color: #3d3d3d;
+        }
+        .debtor-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 8px rgba(255,255,255,0.1);
+        }
+        .trust-badge {
+            font-size: 0.9rem;
+            padding: 5px 10px;
+        }
+        .high-risk {
+            border-left-color: #dc3545 !important;
+        }
+        .medium-risk {
+            border-left-color: #ffc107 !important;
+        }
+        .low-risk {
+            border-left-color: #28a745 !important;
+        }
+        .card {
+            background-color: #252525;
+            border-color: #3d3d3d;
+        }
+        .navbar {
+            background-color: #1f1f1f !important;
+            border-bottom: 2px solid #3d3d3d;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark">
+        <div class="container-fluid">
+            <a href="/" class="navbar-brand">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+            <span class="navbar-text text-white">
+                <i class="fas fa-users"></i> Debtor Management
+            </span>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Summary Card -->
+        <div class="card shadow-sm mb-4 bg-danger text-white">
+            <div class="card-body text-center">
+                <h3><i class="fas fa-exclamation-circle"></i> Total Outstanding Debt</h3>
+                <h1 class="display-3">R{{ total_owed }}</h1>
+                <p class="mb-0">from {{ debtors|length }} customer(s)</p>
+            </div>
+        </div>
+
+        <!-- Debtors List -->
+        {% if debtors %}
+        <div class="row">
+            {% for debtor in debtors %}
+            <div class="col-md-6 mb-3">
+                <div class="card debtor-card {% if debtor.balance > 100 %}high-risk{% elif debtor.balance > 50 %}medium-risk{% else %}low-risk{% endif %}">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <h5 class="card-title mb-1">
+                                    <i class="fas fa-user"></i> {{ debtor.name }}
+                                </h5>
+                                <span class="badge trust-badge {% if debtor.trust_score >= 70 %}bg-success{% elif debtor.trust_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}">
+                                    Trust Score: {{ debtor.trust_score }}/100
+                                </span>
+                            </div>
+                            <div class="text-end">
+                                <h3 class="text-danger mb-0">R{{ "%.2f"|format(debtor.balance) }}</h3>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <div class="row small text-muted mb-3">
+                            <div class="col-6">
+                                <i class="fas fa-calendar-plus"></i> First Credit:<br>
+                                <strong>{{ debtor.created.strftime('%d %b %Y') if debtor.created else 'N/A' }}</strong>
+                            </div>
+                            <div class="col-6">
+                                <i class="fas fa-shopping-cart"></i> Last Purchase:<br>
+                                <strong>{{ debtor.last_purchase.strftime('%d %b %Y') if debtor.last_purchase else 'N/A' }}</strong>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-success" onclick="recordPayment('{{ debtor.name }}', {{ debtor.balance }})">
+                                <i class="fas fa-money-bill-wave"></i> Record Payment
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" onclick="clearDebt('{{ debtor.name }}')">
+                                <i class="fas fa-trash"></i> Clear/Forgive Debt
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="alert alert-success text-center">
+            <i class="fas fa-check-circle fa-3x mb-3"></i>
+            <h4>No Outstanding Debts!</h4>
+            <p class="mb-0">All customers have paid their balances.</p>
+        </div>
+        {% endif %}
+
+        <div class="text-center mt-4 mb-4">
+            <a href="/" class="btn btn-primary btn-lg">
+                <i class="fas fa-home"></i> Return to Dashboard
+            </a>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function recordPayment(name, balance) {
+            const amount = prompt(`${name} owes R${balance.toFixed(2)}. How much are they paying?`, balance.toFixed(2));
+            
+            if (amount === null || amount === '') return;
+            
+            const paymentAmount = parseFloat(amount);
+            if (isNaN(paymentAmount) || paymentAmount <= 0) {
+                alert('Invalid payment amount!');
+                return;
+            }
+            
+            if (paymentAmount > balance) {
+                if (!confirm(`Payment (R${paymentAmount.toFixed(2)}) exceeds debt (R${balance.toFixed(2)}). Continue anyway?`)) {
+                    return;
+                }
+            }
+            
+            fetch('/payment', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    name: name,
+                    amount: paymentAmount
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    if(data.paid_in_full) {
+                        alert(`✓ ${name} has paid in full! Debt cleared.`);
+                    } else {
+                        alert(`✓ Payment recorded!\nNew balance: R${data.new_balance.toFixed(2)}`);
+                    }
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('Error recording payment: ' + error);
+            });
+        }
+
+        function clearDebt(name) {
+            if (!confirm(`Are you sure you want to clear/forgive all debt for ${name}? This cannot be undone.`)) {
+                return;
+            }
+            
+            fetch('/payment', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    name: name,
+                    amount: 999999
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    alert(`✓ Debt cleared for ${name}`);
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                alert('Error clearing debt: ' + error);
+            });
+        }
+    </script>
+</body>
+</html>

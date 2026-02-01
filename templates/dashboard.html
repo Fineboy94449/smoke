@@ -1,0 +1,393 @@
+Sell Loose Stick<br>
+                            <small>R1<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <title>SmokeTrack Manager</title>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+        }
+        .stat-card {
+            transition: transform 0.2s;
+            background: linear-gradient(135deg, #2d2d2d 0%, #1f1f1f 100%);
+            border: 1px solid #3d3d3d;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            border-color: #4d4d4d;
+        }
+        .credit-side {
+            border-left: 3px solid #ffc107;
+            padding-left: 20px;
+        }
+        .sale-btn {
+            height: 80px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .sale-btn:hover {
+            transform: scale(1.05);
+        }
+        .debtor-item {
+            border-left: 4px solid #dc3545;
+            background-color: #252525;
+        }
+        .card {
+            background-color: #252525;
+            border-color: #3d3d3d;
+        }
+        .navbar {
+            background-color: #1f1f1f !important;
+            border-bottom: 2px solid #3d3d3d;
+        }
+        .form-control, .form-control:focus {
+            background-color: #2d2d2d;
+            border-color: #4d4d4d;
+            color: #e0e0e0;
+        }
+        .alert-danger {
+            background-color: #3d1f1f;
+            border-color: #dc3545;
+            color: #ff6b6b;
+        }
+        .alert-warning {
+            background-color: #3d3d1f;
+            border-color: #ffc107;
+            color: #ffdd57;
+        }
+        .delete-btn {
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        .delete-btn:hover {
+            opacity: 1;
+        }
+        .transaction-item {
+            background-color: #2d2d2d;
+            border: 1px solid #3d3d3d;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            padding: 12px;
+            transition: all 0.2s;
+        }
+        .transaction-item:hover {
+            background-color: #353535;
+            border-color: #4d4d4d;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">
+                <i class="fas fa-smoking"></i> SmokeTrack Manager
+            </span>
+            <div>
+                <a href="/stock" class="btn btn-outline-warning btn-sm me-2">
+                    <i class="fas fa-boxes"></i> Stock
+                </a>
+                <a href="/debtors" class="btn btn-outline-warning btn-sm me-2">
+                    <i class="fas fa-users"></i> Debtors
+                </a>
+                <a href="/history" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-history"></i> History
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Financial Overview -->
+        <div class="row text-center mb-4">
+            <div class="col-md-3">
+                <div class="card p-3 shadow-sm stat-card bg-success text-white">
+                    <h6><i class="fas fa-money-bill-wave"></i> Cash Sales</h6>
+                    <h2>R{{ cash }}</h2>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3 shadow-sm stat-card bg-danger text-white">
+                    <h6><i class="fas fa-credit-card"></i> Credit Owed</h6>
+                    <h2>R{{ credit }}</h2>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3 shadow-sm stat-card bg-primary text-white">
+                    <h6><i class="fas fa-chart-line"></i> Net Profit</h6>
+                    <h2>R{{ profit }}</h2>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3 shadow-sm stat-card bg-info text-white">
+                    <h6><i class="fas fa-calendar-day"></i> Today's Sales</h6>
+                    <h2>R{{ daily }}</h2>
+                </div>
+            </div>
+        </div>
+
+        <!-- Risk Alert -->
+        {% if risk == "HIGH" %}
+        <div class="alert alert-danger shadow-sm">
+            <i class="fas fa-exclamation-triangle"></i> 
+            <strong>WARNING:</strong> Your credit exposure is too high! Stop giving credit until debts are paid.
+        </div>
+        {% elif risk == "MEDIUM" %}
+        <div class="alert alert-warning shadow-sm">
+            <i class="fas fa-info-circle"></i> 
+            <strong>CAUTION:</strong> Credit levels are moderate. Monitor closely.
+        </div>
+        {% endif %}
+
+        <!-- Sales Interface -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <div class="row">
+                    <!-- Cash Side -->
+                    <div class="col-md-6">
+                        <h4 class="text-success mb-3">
+                            <i class="fas fa-money-bill"></i> Cash Sales
+                        </h4>
+                        <button class="btn btn-success sale-btn w-100 mb-3" onclick="sell('loose', 'cash')">
+                            <i class="fas fa-cigarette"></i><br>
+                            Sell Loose Stick<br>
+                            <small>R1.50 (Profit: R0.78)</small>
+                        </button>
+                        <button class="btn btn-success sale-btn w-100" onclick="sell('pack', 'cash')">
+                            <i class="fas fa-box"></i><br>
+                            Sell Cash Pack<br>
+                            <small>R30.00 (Profit: R15.60)</small>
+                        </button>
+                    </div>
+
+                    <!-- Credit Side -->
+                    <div class="col-md-6 credit-side">
+                        <h4 class="text-warning mb-3">
+                            <i class="fas fa-handshake"></i> Credit Sales
+                        </h4>
+                        <input type="text" id="custName" class="form-control form-control-lg mb-3" 
+                               placeholder="Enter Customer Name" list="customerList">
+                        <datalist id="customerList">
+                            {% for debtor in debtors %}
+                            <option value="{{ debtor.name }}">Balance: R{{ debtor.balance }}</option>
+                            {% endfor %}
+                        </datalist>
+                        <button class="btn btn-warning sale-btn w-100" onclick="sell('pack', 'credit')">
+                            <i class="fas fa-box-open"></i><br>
+                            Sell Credit Pack<br>
+                            <small>R40.00 (Profit: R25.60)</small>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Transactions with Delete -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-dark">
+                <h5 class="mb-0"><i class="fas fa-receipt"></i> Recent Transactions</h5>
+            </div>
+            <div class="card-body" id="recentTransactions">
+                <div class="text-center text-muted">
+                    <i class="fas fa-spinner fa-spin"></i> Loading...
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Debtor List -->
+        {% if debtors %}
+        <div class="card shadow-sm">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="fas fa-list"></i> Top Debtors</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for debtor in debtors[:6] %}
+                    <div class="col-md-6 mb-3">
+                        <div class="card debtor-item">
+                            <div class="card-body py-2">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>{{ debtor.name }}</strong><br>
+                                        <small class="text-muted">Trust: {{ debtor.trust_score }}/100</small>
+                                    </div>
+                                    <div class="text-end">
+                                        <h5 class="text-danger mb-0">R{{ debtor.balance }}</h5>
+                                        <button class="btn btn-sm btn-success mt-1" 
+                                                onclick="recordPayment('{{ debtor.name }}', {{ debtor.balance }})">
+                                            <i class="fas fa-money-bill"></i> Pay
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <a href="/debtors" class="btn btn-outline-warning w-100 mt-2">
+                    View All Debtors <i class="fas fa-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Stats Footer -->
+        <div class="text-center text-muted mt-4 mb-4">
+            <small>Total Sticks Sold: {{ sticks_sold }} | Cost per Stick: R0.725 | Bundle Cost: R145.00</small>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Load recent transactions on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadRecentTransactions();
+        });
+
+        function loadRecentTransactions() {
+            fetch('/recent-transactions')
+                .then(response => response.json())
+                .then(data => {
+                    const container = document.getElementById('recentTransactions');
+                    if (data.transactions.length === 0) {
+                        container.innerHTML = '<div class="text-center text-muted">No recent transactions</div>';
+                        return;
+                    }
+                    
+                    container.innerHTML = data.transactions.map(t => `
+                        <div class="transaction-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="flex-grow-1">
+                                    <strong>${t.customer}</strong> - 
+                                    <span class="badge bg-${t.method === 'cash' ? 'success' : 'warning'}">${t.method}</span>
+                                    <span class="badge bg-${t.item_type === 'loose' ? 'info' : 'primary'}">${t.item_type}</span>
+                                    <br>
+                                    <small class="text-muted">${t.time_ago}</small>
+                                </div>
+                                <div class="text-end me-3">
+                                    <strong class="text-success">R${t.price.toFixed(2)}</strong>
+                                    <br>
+                                    <small class="text-muted">Profit: R${t.profit.toFixed(2)}</small>
+                                </div>
+                                <button class="btn btn-sm btn-danger delete-btn" onclick="deleteTransaction('${t.id}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `).join('');
+                })
+                .catch(error => {
+                    console.error('Error loading transactions:', error);
+                    document.getElementById('recentTransactions').innerHTML = 
+                        '<div class="text-center text-danger">Error: ' + error.message + '</div>';
+                });
+        }
+
+        function deleteTransaction(transactionId) {
+            if (!confirm('Are you sure you want to delete this transaction? This will also reverse any credit applied.')) {
+                return;
+            }
+            
+            fetch('/delete-transaction', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({transaction_id: transactionId})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    alert('✓ Transaction deleted successfully!');
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('Error deleting transaction: ' + error);
+            });
+        }
+
+        function sell(item, method) {
+            const name = document.getElementById('custName').value;
+            
+            if (method === 'credit' && !name.trim()) {
+                alert("Please enter customer name for credit sale!");
+                document.getElementById('custName').focus();
+                return;
+            }
+            
+            fetch('/sell', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    item: item, 
+                    method: method, 
+                    name: name.trim()
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    const profit = data.profit_made.toFixed(2);
+                    alert(`✓ Sale complete! Profit: R${profit}`);
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                alert('Error processing sale: ' + error);
+            });
+        }
+
+        function recordPayment(name, balance) {
+            const amount = prompt(`${name} owes R${balance}. How much are they paying?`, balance);
+            
+            if (amount === null || amount === '') return;
+            
+            const paymentAmount = parseFloat(amount);
+            if (isNaN(paymentAmount) || paymentAmount <= 0) {
+                alert('Invalid amount!');
+                return;
+            }
+            
+            if (paymentAmount > balance) {
+                if (!confirm(`Payment (R${paymentAmount}) exceeds debt (R${balance}). Continue?`)) {
+                    return;
+                }
+            }
+            
+            fetch('/payment', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    name: name,
+                    amount: paymentAmount
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    if(data.paid_in_full) {
+                        alert(`✓ ${name} has paid in full! Debt cleared.`);
+                    } else {
+                        alert(`✓ Payment recorded! New balance: R${data.new_balance.toFixed(2)}`);
+                    }
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                alert('Error recording payment: ' + error);
+            });
+        }
+
+        // Auto-focus on customer name input
+        document.getElementById('custName').addEventListener('focus', function() {
+            this.select();
+        });
+    </script>
+</body>
+</html>
