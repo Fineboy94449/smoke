@@ -1,0 +1,11 @@
+# This file specifies files that should NOT be included when running
+# gcloud run deploy from the directory.
+.git
+.gitignore
+.venv
+*.pyc
+__pycache__
+.pytest_cache
+.env
+.env.local
+serviceAccountKey.json

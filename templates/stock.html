@@ -67,11 +67,13 @@
     <nav class="navbar navbar-dark">
         <div class="container-fluid">
             <a href="/" class="navbar-brand">
-                <i class="fas fa-arrow-left"></i> Back to Dashboard
+                <i class="fas fa-arrow-left"></i> Dashboard
             </a>
-            <span class="navbar-text text-white">
-                <i class="fas fa-boxes"></i> Stock Manager
-            </span>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-dark border" style="font-size:0.85rem;"><i class="fas fa-user"></i> {{ user }}</span>
+                <span class="navbar-text text-white mb-0"><i class="fas fa-boxes"></i> Stock</span>
+                <a href="/logout" class="btn btn-outline-danger btn-sm"><i class="fas fa-sign-out-alt"></i></a>
+            </div>
         </div>
     </nav>
 
@@ -248,8 +250,7 @@
         // Auto-calculate cost when bundles change
         document.getElementById('stockBundles').addEventListener('input', function() {
             const bundles = parseInt(this.value) || 0;
-            const cost = bundles * 145.00;
-            
+            const cost = bundles * 144.00;
             document.getElementById('stockCostDisplay').value = 'R' + cost.toFixed(2);
         });
 

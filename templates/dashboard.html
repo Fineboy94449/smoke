@@ -1,214 +1,226 @@
-Sell Loose Stick<br>
-                            <small>R1<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <title>SmokeTrack Manager</title>
     <style>
-        body {
-            background-color: #1a1a1a;
-            color: #e0e0e0;
-        }
+        body { background-color: #1a1a1a; color: #e0e0e0; }
+        .card { background-color: #252525; border-color: #3d3d3d; }
+        .navbar { background-color: #1f1f1f !important; border-bottom: 2px solid #3d3d3d; }
         .stat-card {
-            transition: transform 0.2s;
-            background: linear-gradient(135deg, #2d2d2d 0%, #1f1f1f 100%);
+            background: linear-gradient(135deg, #2d2d2d, #1f1f1f);
             border: 1px solid #3d3d3d;
+            transition: transform 0.2s;
         }
-        .stat-card:hover {
-            transform: translateY(-5px);
-            border-color: #4d4d4d;
-        }
-        .credit-side {
-            border-left: 3px solid #ffc107;
-            padding-left: 20px;
-        }
+        .stat-card:hover { transform: translateY(-4px); }
         .sale-btn {
-            height: 80px;
-            font-size: 1.2rem;
+            height: 70px;
+            font-size: 1.1rem;
             font-weight: bold;
             transition: all 0.3s;
         }
-        .sale-btn:hover {
-            transform: scale(1.05);
-        }
-        .debtor-item {
-            border-left: 4px solid #dc3545;
-            background-color: #252525;
-        }
-        .card {
-            background-color: #252525;
-            border-color: #3d3d3d;
-        }
-        .navbar {
-            background-color: #1f1f1f !important;
-            border-bottom: 2px solid #3d3d3d;
-        }
+        .sale-btn:hover { transform: scale(1.03); }
+        .credit-side { border-left: 3px solid #ffc107; padding-left: 20px; }
         .form-control, .form-control:focus {
             background-color: #2d2d2d;
             border-color: #4d4d4d;
             color: #e0e0e0;
         }
-        .alert-danger {
-            background-color: #3d1f1f;
-            border-color: #dc3545;
-            color: #ff6b6b;
-        }
-        .alert-warning {
-            background-color: #3d3d1f;
+        .form-control:focus {
+            box-shadow: 0 0 0 0.2rem rgba(255,193,7,0.25);
             border-color: #ffc107;
-            color: #ffdd57;
         }
-        .delete-btn {
-            opacity: 0.7;
-            transition: opacity 0.2s;
-        }
-        .delete-btn:hover {
-            opacity: 1;
-        }
+        .qty-input { width: 80px; text-align: center; font-weight: bold; font-size: 1.2rem; }
+        .debtor-item { border-left: 4px solid #dc3545; background-color: #252525; }
         .transaction-item {
             background-color: #2d2d2d;
             border: 1px solid #3d3d3d;
-            margin-bottom: 8px;
             border-radius: 8px;
-            padding: 12px;
+            padding: 10px 12px;
+            margin-bottom: 6px;
             transition: all 0.2s;
         }
-        .transaction-item:hover {
-            background-color: #353535;
-            border-color: #4d4d4d;
-        }
+        .transaction-item:hover { border-color: #4d4d4d; }
+        .delete-btn { opacity: 0.6; transition: opacity 0.2s; }
+        .delete-btn:hover { opacity: 1; }
+        .alert-danger { background-color: #3d1f1f; border-color: #dc3545; color: #ff6b6b; }
+        .alert-warning { background-color: #3d3520; border-color: #ffc107; color: #ffdd57; }
+        .chart-container { position: relative; height: 260px; }
+        .user-badge { font-size: 0.85rem; }
     </style>
 </head>
 <body>
+    <!-- NAVBAR -->
     <nav class="navbar navbar-dark">
         <div class="container-fluid">
-            <span class="navbar-brand mb-0 h1">
-                <i class="fas fa-smoking"></i> SmokeTrack Manager
-            </span>
-            <div>
-                <a href="/stock" class="btn btn-outline-warning btn-sm me-2">
-                    <i class="fas fa-boxes"></i> Stock
-                </a>
-                <a href="/debtors" class="btn btn-outline-warning btn-sm me-2">
-                    <i class="fas fa-users"></i> Debtors
-                </a>
-                <a href="/history" class="btn btn-outline-light btn-sm">
-                    <i class="fas fa-history"></i> History
-                </a>
+            <span class="navbar-brand mb-0 h1"><i class="fas fa-smoking"></i> SmokeTrack</span>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-dark border user-badge"><i class="fas fa-user"></i> {{ user }}</span>
+                <a href="/stock" class="btn btn-outline-warning btn-sm"><i class="fas fa-boxes"></i> Stock</a>
+                <a href="/debtors" class="btn btn-outline-warning btn-sm"><i class="fas fa-users"></i> Debtors</a>
+                <a href="/history" class="btn btn-outline-light btn-sm"><i class="fas fa-history"></i> History</a>
+                <a href="/logout" class="btn btn-outline-danger btn-sm"><i class="fas fa-sign-out-alt"></i></a>
             </div>
         </div>
     </nav>
 
-    <div class="container mt-4">
-        <!-- Financial Overview -->
-        <div class="row text-center mb-4">
-            <div class="col-md-3">
-                <div class="card p-3 shadow-sm stat-card bg-success text-white">
-                    <h6><i class="fas fa-money-bill-wave"></i> Cash Sales</h6>
-                    <h2>R{{ cash }}</h2>
+    <div class="container mt-3">
+        <!-- STAT CARDS -->
+        <div class="row text-center mb-3">
+            <div class="col-6 col-md-3 mb-2">
+                <div class="card p-3 stat-card bg-success text-white">
+                    <h6 class="mb-0"><i class="fas fa-money-bill-wave"></i> Cash</h6>
+                    <h3 class="mb-0">R{{ cash }}</h3>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card p-3 shadow-sm stat-card bg-danger text-white">
-                    <h6><i class="fas fa-credit-card"></i> Credit Owed</h6>
-                    <h2>R{{ credit }}</h2>
+            <div class="col-6 col-md-3 mb-2">
+                <div class="card p-3 stat-card bg-danger text-white">
+                    <h6 class="mb-0"><i class="fas fa-credit-card"></i> Credit</h6>
+                    <h3 class="mb-0">R{{ credit }}</h3>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card p-3 shadow-sm stat-card bg-primary text-white">
-                    <h6><i class="fas fa-chart-line"></i> Net Profit</h6>
-                    <h2>R{{ profit }}</h2>
+            <div class="col-6 col-md-3 mb-2">
+                <div class="card p-3 stat-card bg-primary text-white">
+                    <h6 class="mb-0"><i class="fas fa-chart-line"></i> Profit</h6>
+                    <h3 class="mb-0">R{{ profit }}</h3>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card p-3 shadow-sm stat-card bg-info text-white">
-                    <h6><i class="fas fa-calendar-day"></i> Today's Sales</h6>
-                    <h2>R{{ daily }}</h2>
+            <div class="col-6 col-md-3 mb-2">
+                <div class="card p-3 stat-card bg-info text-white">
+                    <h6 class="mb-0"><i class="fas fa-calendar-day"></i> Today</h6>
+                    <h3 class="mb-0">R{{ daily }}</h3>
                 </div>
             </div>
         </div>
 
-        <!-- Risk Alert -->
+        <!-- RISK ALERT -->
         {% if risk == "HIGH" %}
         <div class="alert alert-danger shadow-sm">
-            <i class="fas fa-exclamation-triangle"></i> 
-            <strong>WARNING:</strong> Your credit exposure is too high! Stop giving credit until debts are paid.
+            <i class="fas fa-exclamation-triangle"></i> <strong>WARNING:</strong> Credit exposure too high! Stop giving credit until debts are paid.
         </div>
         {% elif risk == "MEDIUM" %}
         <div class="alert alert-warning shadow-sm">
-            <i class="fas fa-info-circle"></i> 
-            <strong>CAUTION:</strong> Credit levels are moderate. Monitor closely.
+            <i class="fas fa-info-circle"></i> <strong>CAUTION:</strong> Credit levels are moderate. Monitor closely.
         </div>
         {% endif %}
 
-        <!-- Sales Interface -->
-        <div class="card shadow-sm mb-4">
+        <!-- SELL SECTION -->
+        <div class="card shadow-sm mb-3">
             <div class="card-body">
                 <div class="row">
-                    <!-- Cash Side -->
+                    <!-- CASH SIDE -->
                     <div class="col-md-6">
-                        <h4 class="text-success mb-3">
-                            <i class="fas fa-money-bill"></i> Cash Sales
-                        </h4>
-                        <button class="btn btn-success sale-btn w-100 mb-3" onclick="sell('loose', 'cash')">
-                            <i class="fas fa-cigarette"></i><br>
-                            Sell Loose Stick<br>
-                            <small>R1.50 (Profit: R0.78)</small>
+                        <h5 class="text-success mb-3"><i class="fas fa-money-bill"></i> Cash Sales</h5>
+
+                        <!-- Loose Sticks with qty -->
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <button class="btn btn-dark btn-sm" onclick="changeQty('looseQty', -1)">−</button>
+                            <input type="number" id="looseQty" class="form-control qty-input" value="1" min="1" max="999">
+                            <button class="btn btn-dark btn-sm" onclick="changeQty('looseQty', 1)">+</button>
+                            <span class="text-muted small" id="loosePrice">= R1.50</span>
+                        </div>
+                        <button class="btn btn-success sale-btn w-100 mb-2" onclick="sell('loose', 'cash')">
+                            <i class="fas fa-cigarette"></i> Sell Loose Sticks
                         </button>
+
+                        <!-- Packs with qty -->
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <button class="btn btn-dark btn-sm" onclick="changeQty('cashPackQty', -1)">−</button>
+                            <input type="number" id="cashPackQty" class="form-control qty-input" value="1" min="1" max="999">
+                            <button class="btn btn-dark btn-sm" onclick="changeQty('cashPackQty', 1)">+</button>
+                            <span class="text-muted small" id="cashPackPrice">= R30.00</span>
+                        </div>
                         <button class="btn btn-success sale-btn w-100" onclick="sell('pack', 'cash')">
-                            <i class="fas fa-box"></i><br>
-                            Sell Cash Pack<br>
-                            <small>R30.00 (Profit: R15.60)</small>
+                            <i class="fas fa-box"></i> Sell Cash Pack (R30 each)
                         </button>
                     </div>
 
-                    <!-- Credit Side -->
+                    <!-- CREDIT SIDE -->
                     <div class="col-md-6 credit-side">
-                        <h4 class="text-warning mb-3">
-                            <i class="fas fa-handshake"></i> Credit Sales
-                        </h4>
-                        <input type="text" id="custName" class="form-control form-control-lg mb-3" 
-                               placeholder="Enter Customer Name" list="customerList">
+                        <h5 class="text-warning mb-3"><i class="fas fa-handshake"></i> Credit Sales</h5>
+                        <input type="text" id="custName" class="form-control mb-2" placeholder="Customer Name" list="customerList">
                         <datalist id="customerList">
                             {% for debtor in debtors %}
-                            <option value="{{ debtor.name }}">Balance: R{{ debtor.balance }}</option>
+                            <option value="{{ debtor.name }}"></option>
                             {% endfor %}
                         </datalist>
+
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <button class="btn btn-dark btn-sm" onclick="changeQty('creditPackQty', -1)">−</button>
+                            <input type="number" id="creditPackQty" class="form-control qty-input" value="1" min="1" max="999">
+                            <button class="btn btn-dark btn-sm" onclick="changeQty('creditPackQty', 1)">+</button>
+                            <span class="text-muted small" id="creditPackPrice">= R40.00</span>
+                        </div>
                         <button class="btn btn-warning sale-btn w-100" onclick="sell('pack', 'credit')">
-                            <i class="fas fa-box-open"></i><br>
-                            Sell Credit Pack<br>
-                            <small>R40.00 (Profit: R25.60)</small>
+                            <i class="fas fa-box-open"></i> Sell Credit Pack (R40 each)
                         </button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Recent Transactions with Delete -->
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-dark">
-                <h5 class="mb-0"><i class="fas fa-receipt"></i> Recent Transactions</h5>
+        <!-- CHARTS ROW -->
+        <div class="row mb-3">
+            <!-- LINE CHART -->
+            <div class="col-md-7 mb-3">
+                <div class="card shadow-sm">
+                    <div class="card-header" style="background-color:#2d2d2d; border-color:#3d3d3d;">
+                        <h6 class="mb-0"><i class="fas fa-chart-line"></i> Sales — Last 30 Days</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="lineChart"></canvas>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="card-body" id="recentTransactions">
-                <div class="text-center text-muted">
-                    <i class="fas fa-spinner fa-spin"></i> Loading...
+
+            <!-- PIE CHARTS -->
+            <div class="col-md-5 mb-3">
+                <div class="card shadow-sm">
+                    <div class="card-header" style="background-color:#2d2d2d; border-color:#3d3d3d;">
+                        <h6 class="mb-0">
+                            <i class="fas fa-chart-pie"></i> Breakdown
+                            <span class="float-end">
+                                <button class="btn btn-sm btn-outline-light active" id="btnCashCredit" onclick="switchPie('cashcredit')">Cash/Credit</button>
+                                <button class="btn btn-sm btn-outline-light" id="btnLoosePack" onclick="switchPie('loosepack')">Loose/Pack</button>
+                                <button class="btn btn-sm btn-outline-light" id="btnProfitCost" onclick="switchPie('profitcost')">Profit/Cost</button>
+                            </span>
+                        </h6>
+                    </div>
+                    <div class="card-body d-flex justify-content-center">
+                        <div style="height:220px; width:220px;">
+                            <canvas id="pieChart"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Quick Debtor List -->
+        <!-- RECENT TRANSACTIONS -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header" style="background-color:#2d2d2d; border-color:#3d3d3d;">
+                <h6 class="mb-0"><i class="fas fa-receipt"></i> Recent Transactions</h6>
+            </div>
+            <div class="card-body" id="recentTransactions">
+                <div class="text-center text-muted"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+            </div>
+        </div>
+
+        <!-- DEBTORS -->
         {% if debtors %}
-        <div class="card shadow-sm">
+        <div class="card shadow-sm mb-3">
             <div class="card-header bg-warning text-dark">
-                <h5 class="mb-0"><i class="fas fa-list"></i> Top Debtors</h5>
+                <h6 class="mb-0"><i class="fas fa-list"></i> Top Debtors</h6>
             </div>
             <div class="card-body">
                 <div class="row">
                     {% for debtor in debtors[:6] %}
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-6 mb-2">
                         <div class="card debtor-item">
                             <div class="card-body py-2">
                                 <div class="d-flex justify-content-between align-items-center">
@@ -217,9 +229,8 @@ Sell Loose Stick<br>
                                         <small class="text-muted">Trust: {{ debtor.trust_score }}/100</small>
                                     </div>
                                     <div class="text-end">
-                                        <h5 class="text-danger mb-0">R{{ debtor.balance }}</h5>
-                                        <button class="btn btn-sm btn-success mt-1" 
-                                                onclick="recordPayment('{{ debtor.name }}', {{ debtor.balance }})">
+                                        <h5 class="text-danger mb-1">R{{ debtor.balance }}</h5>
+                                        <button class="btn btn-sm btn-success" onclick="recordPayment('{{ debtor.name }}', {{ debtor.balance }})">
                                             <i class="fas fa-money-bill"></i> Pay
                                         </button>
                                     </div>
@@ -229,165 +240,241 @@ Sell Loose Stick<br>
                     </div>
                     {% endfor %}
                 </div>
-                <a href="/debtors" class="btn btn-outline-warning w-100 mt-2">
-                    View All Debtors <i class="fas fa-arrow-right"></i>
-                </a>
+                <a href="/debtors" class="btn btn-outline-warning w-100 mt-2">View All Debtors <i class="fas fa-arrow-right"></i></a>
             </div>
         </div>
         {% endif %}
 
-        <!-- Stats Footer -->
-        <div class="text-center text-muted mt-4 mb-4">
-            <small>Total Sticks Sold: {{ sticks_sold }} | Cost per Stick: R0.725 | Bundle Cost: R145.00</small>
+        <div class="text-center text-muted mb-4">
+            <small>Sticks Sold: {{ sticks_sold }} | Cost/Stick: R0.725 | Bundle: R145.00</small>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Load recent transactions on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            loadRecentTransactions();
-        });
+    // ---------- QTY BUTTONS ----------
+    function changeQty(id, dir) {
+        const input = document.getElementById(id);
+        let val = parseInt(input.value) || 1;
+        val = Math.max(1, val + dir);
+        input.value = val;
+        updatePriceLabels();
+    }
 
-        function loadRecentTransactions() {
-            fetch('/recent-transactions')
-                .then(response => response.json())
-                .then(data => {
-                    const container = document.getElementById('recentTransactions');
-                    if (data.transactions.length === 0) {
-                        container.innerHTML = '<div class="text-center text-muted">No recent transactions</div>';
-                        return;
-                    }
-                    
-                    container.innerHTML = data.transactions.map(t => `
-                        <div class="transaction-item">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div class="flex-grow-1">
-                                    <strong>${t.customer}</strong> - 
-                                    <span class="badge bg-${t.method === 'cash' ? 'success' : 'warning'}">${t.method}</span>
-                                    <span class="badge bg-${t.item_type === 'loose' ? 'info' : 'primary'}">${t.item_type}</span>
-                                    <br>
-                                    <small class="text-muted">${t.time_ago}</small>
-                                </div>
-                                <div class="text-end me-3">
-                                    <strong class="text-success">R${t.price.toFixed(2)}</strong>
-                                    <br>
-                                    <small class="text-muted">Profit: R${t.profit.toFixed(2)}</small>
-                                </div>
-                                <button class="btn btn-sm btn-danger delete-btn" onclick="deleteTransaction('${t.id}')">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </div>
-                    `).join('');
-                })
-                .catch(error => {
-                    console.error('Error loading transactions:', error);
-                    document.getElementById('recentTransactions').innerHTML = 
-                        '<div class="text-center text-danger">Error: ' + error.message + '</div>';
-                });
+    function updatePriceLabels() {
+        const loose = parseInt(document.getElementById('looseQty').value) || 1;
+        const cashPack = parseInt(document.getElementById('cashPackQty').value) || 1;
+        const creditPack = parseInt(document.getElementById('creditPackQty').value) || 1;
+        document.getElementById('loosePrice').textContent = `= R${(loose * 1.50).toFixed(2)}`;
+        document.getElementById('cashPackPrice').textContent = `= R${(cashPack * 30).toFixed(2)}`;
+        document.getElementById('creditPackPrice').textContent = `= R${(creditPack * 40).toFixed(2)}`;
+    }
+
+    // Listen for manual input changes
+    ['looseQty','cashPackQty','creditPackQty'].forEach(id => {
+        document.getElementById(id).addEventListener('input', updatePriceLabels);
+    });
+
+    // ---------- SELL ----------
+    function sell(item, method) {
+        const name = document.getElementById('custName').value.trim();
+        if (method === 'credit' && !name) {
+            alert('Enter customer name for credit sale!');
+            document.getElementById('custName').focus();
+            return;
         }
 
-        function deleteTransaction(transactionId) {
-            if (!confirm('Are you sure you want to delete this transaction? This will also reverse any credit applied.')) {
-                return;
+        let qty;
+        if (item === 'loose') {
+            qty = parseInt(document.getElementById('looseQty').value) || 1;
+        } else {
+            qty = parseInt(document.getElementById(method === 'cash' ? 'cashPackQty' : 'creditPackQty').value) || 1;
+        }
+
+        fetch('/sell', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ item, method, name, qty })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert(`✓ Sale: R${data.price.toFixed(2)} | Profit: R${data.profit_made.toFixed(2)}`);
+                location.reload();
             }
-            
-            fetch('/delete-transaction', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({transaction_id: transactionId})
-            })
-            .then(response => response.json())
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    // ---------- PAYMENT ----------
+    function recordPayment(name, balance) {
+        const amount = prompt(`${name} owes R${balance}. How much paying?`, balance);
+        if (amount === null || amount === '') return;
+        const pay = parseFloat(amount);
+        if (isNaN(pay) || pay <= 0) { alert('Invalid amount!'); return; }
+
+        fetch('/payment', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ name, amount: pay })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert(data.paid_in_full ? `✓ ${name} paid in full!` : `✓ New balance: R${data.new_balance.toFixed(2)}`);
+                location.reload();
+            }
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    // ---------- RECENT TRANSACTIONS ----------
+    document.addEventListener('DOMContentLoaded', loadRecentTransactions);
+
+    function loadRecentTransactions() {
+        fetch('/recent-transactions')
+            .then(r => r.json())
             .then(data => {
-                if(data.status === 'success') {
-                    alert('✓ Transaction deleted successfully!');
-                    location.reload();
-                } else {
-                    alert('Error: ' + data.message);
-                }
-            })
-            .catch(error => {
-                alert('Error deleting transaction: ' + error);
-            });
-        }
-
-        function sell(item, method) {
-            const name = document.getElementById('custName').value;
-            
-            if (method === 'credit' && !name.trim()) {
-                alert("Please enter customer name for credit sale!");
-                document.getElementById('custName').focus();
-                return;
-            }
-            
-            fetch('/sell', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    item: item, 
-                    method: method, 
-                    name: name.trim()
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if(data.status === 'success') {
-                    const profit = data.profit_made.toFixed(2);
-                    alert(`✓ Sale complete! Profit: R${profit}`);
-                    location.reload();
-                }
-            })
-            .catch(error => {
-                alert('Error processing sale: ' + error);
-            });
-        }
-
-        function recordPayment(name, balance) {
-            const amount = prompt(`${name} owes R${balance}. How much are they paying?`, balance);
-            
-            if (amount === null || amount === '') return;
-            
-            const paymentAmount = parseFloat(amount);
-            if (isNaN(paymentAmount) || paymentAmount <= 0) {
-                alert('Invalid amount!');
-                return;
-            }
-            
-            if (paymentAmount > balance) {
-                if (!confirm(`Payment (R${paymentAmount}) exceeds debt (R${balance}). Continue?`)) {
+                const c = document.getElementById('recentTransactions');
+                if (!data.transactions || data.transactions.length === 0) {
+                    c.innerHTML = '<div class="text-center text-muted">No recent transactions</div>';
                     return;
                 }
-            }
-            
-            fetch('/payment', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    name: name,
-                    amount: paymentAmount
-                })
+                c.innerHTML = data.transactions.map(t => `
+                    <div class="transaction-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>${t.customer}</strong>
+                                <span class="badge bg-${t.method==='cash'?'success':'danger'} ms-1">${t.method}</span>
+                                <span class="badge bg-${t.item_type==='loose'?'info':'primary'} ms-1">${t.item_type}</span>
+                                <br><small class="text-muted">${t.time_ago} • ${t.qty} stick${t.qty>1?'s':''}</small>
+                            </div>
+                            <div class="text-end d-flex align-items-center gap-2">
+                                <div>
+                                    <strong class="text-success">R${t.price.toFixed(2)}</strong><br>
+                                    <small class="text-muted">Profit: R${t.profit.toFixed(2)}</small>
+                                </div>
+                                <button class="btn btn-sm btn-danger delete-btn" onclick="deleteTransaction('${t.id}')"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
             })
-            .then(response => response.json())
-            .then(data => {
-                if(data.status === 'success') {
-                    if(data.paid_in_full) {
-                        alert(`✓ ${name} has paid in full! Debt cleared.`);
-                    } else {
-                        alert(`✓ Payment recorded! New balance: R${data.new_balance.toFixed(2)}`);
-                    }
-                    location.reload();
-                }
-            })
-            .catch(error => {
-                alert('Error recording payment: ' + error);
+            .catch(e => {
+                document.getElementById('recentTransactions').innerHTML = '<div class="text-center text-danger">Error: ' + e.message + '</div>';
             });
-        }
+    }
 
-        // Auto-focus on customer name input
-        document.getElementById('custName').addEventListener('focus', function() {
-            this.select();
-        });
+    function deleteTransaction(id) {
+        if (!confirm('Delete this transaction? Credit will be reversed if applicable.')) return;
+        fetch('/delete-transaction', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ transaction_id: id })
+        })
+        .then(r => r.json())
+        .then(data => { if (data.status === 'success') { alert('✓ Deleted'); location.reload(); } })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    // ---------- CHARTS ----------
+    const lineLabels = {{ line_labels | tojson }};
+    const lineCash   = {{ line_cash | tojson }};
+    const lineCredit = {{ line_credit | tojson }};
+    const lineSticks = {{ line_sticks | tojson }};
+
+    // LINE CHART
+    const lineCtx = document.getElementById('lineChart').getContext('2d');
+    new Chart(lineCtx, {
+        type: 'line',
+        data: {
+            labels: lineLabels,
+            datasets: [
+                {
+                    label: 'Cash (R)',
+                    data: lineCash,
+                    borderColor: '#28a745',
+                    backgroundColor: 'rgba(40,167,69,0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 2
+                },
+                {
+                    label: 'Credit (R)',
+                    data: lineCredit,
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220,53,69,0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#e0e0e0', font: { size: 12 } } } },
+            scales: {
+                x: { ticks: { color: '#888', maxRotation: 45, font: { size: 10 } }, grid: { color: '#2d2d2d' } },
+                y: { ticks: { color: '#888', callback: v => 'R'+v }, grid: { color: '#2d2d2d' } }
+            }
+        }
+    });
+
+    // PIE CHART DATA
+    const pieData = {
+        cashcredit: {
+            labels: ['Cash', 'Credit'],
+            data: [{{ cash_pie }}, {{ credit_pie }}],
+            colors: ['#28a745', '#dc3545']
+        },
+        loosepack: {
+            labels: ['Loose', 'Packs'],
+            data: [{{ loose_total }}, {{ pack_total }}],
+            colors: ['#17a2b8', '#6f42c1']
+        },
+        profitcost: {
+            labels: ['Profit', 'Cost'],
+            data: [{{ profit_pie }}, {{ cost_pie }}],
+            colors: ['#007bff', '#ffc107']
+        }
+    };
+
+    let currentPie = 'cashcredit';
+    const pieCtx = document.getElementById('pieChart').getContext('2d');
+    let pieChart = new Chart(pieCtx, {
+        type: 'doughnut',
+        data: {
+            labels: pieData.cashcredit.labels,
+            datasets: [{
+                data: pieData.cashcredit.data,
+                backgroundColor: pieData.cashcredit.colors,
+                borderColor: '#1a1a1a',
+                borderWidth: 3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { color: '#e0e0e0', font: { size: 11 } } },
+                tooltip: { callbacks: { label: ctx => ' R' + ctx.parsed.toFixed(2) } }
+            }
+        }
+    });
+
+    function switchPie(type) {
+        currentPie = type;
+        // Update buttons
+        document.getElementById('btnCashCredit').className = 'btn btn-sm btn-outline-light' + (type==='cashcredit' ? ' active' : '');
+        document.getElementById('btnLoosePack').className  = 'btn btn-sm btn-outline-light' + (type==='loosepack'  ? ' active' : '');
+        document.getElementById('btnProfitCost').className = 'btn btn-sm btn-outline-light' + (type==='profitcost' ? ' active' : '');
+        // Update chart
+        pieChart.data.labels = pieData[type].labels;
+        pieChart.data.datasets[0].data = pieData[type].data;
+        pieChart.data.datasets[0].backgroundColor = pieData[type].colors;
+        pieChart.update();
+    }
     </script>
 </body>
 </html>
