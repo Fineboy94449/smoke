@@ -188,38 +188,3 @@
     </script>
 </body>
 </html>
-
-<!-- Report Stats Template -->
-{% macro report_stats(data) %}
-<div class="stat-row">
-    <span class="text-muted"><i class="fas fa-dollar-sign"></i> Total Sales</span>
-    <strong class="text-success">R{{ data.total_sales }}</strong>
-</div>
-<div class="stat-row">
-    <span class="text-muted"><i class="fas fa-money-bill-wave"></i> Cash Sales</span>
-    <strong class="text-success">R{{ data.cash_sales }}</strong>
-</div>
-<div class="stat-row">
-    <span class="text-muted"><i class="fas fa-credit-card"></i> Credit Sales</span>
-    <strong class="text-warning">R{{ data.credit_sales }}</strong>
-</div>
-<div class="stat-row">
-    <span class="text-muted"><i class="fas fa-chart-line"></i> Net Profit</span>
-    <strong class="text-primary">R{{ data.profit }}</strong>
-</div>
-<div class="stat-row">
-    <span class="text-muted"><i class="fas fa-cigarette"></i> Sticks Sold</span>
-    <strong>{{ data.sticks_sold }}</strong>
-</div>
-<div class="stat-row">
-    <span class="text-muted"><i class="fas fa-hand-holding-usd"></i> Payments Received</span>
-    <strong class="text-info">R{{ data.payments_received }}</strong>
-</div>
-<div class="stat-row">
-    <span class="text-muted"><i class="fas fa-trophy"></i> Top Customer</span>
-    <div class="text-end">
-        <strong>{{ data.top_customer }}</strong><br>
-        <small class="text-muted">R{{ data.top_customer_amount }}</small>
-    </div>
-</div>
-{% endmacro %}
