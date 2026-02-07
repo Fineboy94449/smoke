@@ -115,13 +115,15 @@
                 <!-- Today -->
                 <div id="period-today" class="period-content">
                     <h5 class="text-warning mb-3">📅 Today's Summary</h5>
-                    {% include 'report_stats.html' with data=today %}
+                    {% set data = today %}
+                    {% include 'report_stats.html' %}
                 </div>
 
                 <!-- Yesterday -->
                 <div id="period-yesterday" class="period-content" style="display:none;">
                     <h5 class="text-warning mb-3">📅 Yesterday's Summary</h5>
-                    {% include 'report_stats.html' with data=yesterday %}
+                    {% set data = yesterday %}
+                    {% include 'report_stats.html' %}
                 </div>
 
                 <!-- This Week -->
@@ -134,13 +136,15 @@
                         </span>
                     </div>
                     {% endif %}
-                    {% include 'report_stats.html' with data=this_week %}
+                    {% set data = this_week %}
+                    {% include 'report_stats.html' %}
                 </div>
 
                 <!-- Last Week -->
                 <div id="period-lastweek" class="period-content" style="display:none;">
                     <h5 class="text-warning mb-3">📅 Last Week</h5>
-                    {% include 'report_stats.html' with data=last_week %}
+                    {% set data = last_week %}
+                    {% include 'report_stats.html' %}
                 </div>
 
                 <!-- This Month -->
@@ -153,13 +157,15 @@
                         </span>
                     </div>
                     {% endif %}
-                    {% include 'report_stats.html' with data=this_month %}
+                    {% set data = this_month %}
+                    {% include 'report_stats.html' %}
                 </div>
 
                 <!-- Last Month -->
                 <div id="period-lastmonth" class="period-content" style="display:none;">
                     <h5 class="text-warning mb-3">📅 Last Month</h5>
-                    {% include 'report_stats.html' with data=last_month %}
+                    {% set data = last_month %}
+                    {% include 'report_stats.html' %}
                 </div>
             </div>
         </div>
