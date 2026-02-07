@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <title>Reports - SmokeTrack</title>
+    <style>
+        body { background-color: #1a1a1a; color: #e0e0e0; }
+        .card { background-color: #252525; border-color: #3d3d3d; }
+        .navbar { background-color: #1f1f1f !important; border-bottom: 2px solid #3d3d3d; }
+        .period-tab {
+            padding: 12px 20px;
+            margin: 0 4px 8px;
+            background: #2d2d2d;
+            border: 1px solid #3d3d3d;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .period-tab:hover { background: #353535; }
+        .period-tab.active {
+            background: linear-gradient(135deg, #ffc107, #ff9800);
+            color: #1a1a1a;
+            border-color: #ffc107;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #3d3d3d;
+        }
+        .stat-row:last-child { border-bottom: none; }
+        .change-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: bold;
+        }
+        .change-up { background-color: #1f4d1f; color: #4caf50; }
+        .change-down { background-color: #4d1f1f; color: #f44336; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark">
+        <div class="container-fluid">
+            <a href="/" class="navbar-brand"><i class="fas fa-arrow-left"></i> Dashboard</a>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-dark border" style="font-size:0.85rem;"><i class="fas fa-user"></i> {{ user }}</span>
+                <span class="navbar-text text-white mb-0"><i class="fas fa-file-alt"></i> Reports</span>
+                <a href="/logout" class="btn btn-outline-danger btn-sm"><i class="fas fa-sign-out-alt"></i></a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h4 class="text-warning mb-3"><i class="fas fa-chart-bar"></i> Sales Summary Reports</h4>
+
+        <!-- Period Tabs -->
+        <div class="row mb-3">
+            <div class="col-6 col-md-2">
+                <div class="period-tab active" onclick="showPeriod('today')">
+                    <div class="text-center">
+                        <i class="fas fa-calendar-day"></i><br>
+                        <strong>Today</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="period-tab" onclick="showPeriod('yesterday')">
+                    <div class="text-center">
+                        <i class="fas fa-calendar-minus"></i><br>
+                        <strong>Yesterday</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="period-tab" onclick="showPeriod('thisweek')">
+                    <div class="text-center">
+                        <i class="fas fa-calendar-week"></i><br>
+                        <strong>This Week</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="period-tab" onclick="showPeriod('lastweek')">
+                    <div class="text-center">
+                        <i class="fas fa-calendar-alt"></i><br>
+                        <strong>Last Week</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="period-tab" onclick="showPeriod('thismonth')">
+                    <div class="text-center">
+                        <i class="fas fa-calendar"></i><br>
+                        <strong>This Month</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="period-tab" onclick="showPeriod('lastmonth')">
+                    <div class="text-center">
+                        <i class="fas fa-history"></i><br>
+                        <strong>Last Month</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Report Content -->
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <!-- Today -->
+                <div id="period-today" class="period-content">
+                    <h5 class="text-warning mb-3">📅 Today's Summary</h5>
+                    {% include 'report_stats.html' with data=today %}
+                </div>
+
+                <!-- Yesterday -->
+                <div id="period-yesterday" class="period-content" style="display:none;">
+                    <h5 class="text-warning mb-3">📅 Yesterday's Summary</h5>
+                    {% include 'report_stats.html' with data=yesterday %}
+                </div>
+
+                <!-- This Week -->
+                <div id="period-thisweek" class="period-content" style="display:none;">
+                    <h5 class="text-warning mb-3">📅 This Week (Mon-Today)</h5>
+                    {% if week_change != 0 %}
+                    <div class="mb-3">
+                        <span class="change-badge {% if week_change > 0 %}change-up{% else %}change-down{% endif %}">
+                            {% if week_change > 0 %}↑{% else %}↓{% endif %} {{ week_change|abs }}% vs last week
+                        </span>
+                    </div>
+                    {% endif %}
+                    {% include 'report_stats.html' with data=this_week %}
+                </div>
+
+                <!-- Last Week -->
+                <div id="period-lastweek" class="period-content" style="display:none;">
+                    <h5 class="text-warning mb-3">📅 Last Week</h5>
+                    {% include 'report_stats.html' with data=last_week %}
+                </div>
+
+                <!-- This Month -->
+                <div id="period-thismonth" class="period-content" style="display:none;">
+                    <h5 class="text-warning mb-3">📅 This Month</h5>
+                    {% if month_change != 0 %}
+                    <div class="mb-3">
+                        <span class="change-badge {% if month_change > 0 %}change-up{% else %}change-down{% endif %}">
+                            {% if month_change > 0 %}↑{% else %}↓{% endif %} {{ month_change|abs }}% vs last month
+                        </span>
+                    </div>
+                    {% endif %}
+                    {% include 'report_stats.html' with data=this_month %}
+                </div>
+
+                <!-- Last Month -->
+                <div id="period-lastmonth" class="period-content" style="display:none;">
+                    <h5 class="text-warning mb-3">📅 Last Month</h5>
+                    {% include 'report_stats.html' with data=last_month %}
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-4 mb-4">
+            <a href="/" class="btn btn-primary btn-lg"><i class="fas fa-home"></i> Back to Dashboard</a>
+        </div>
+    </div>
+
+    <script>
+        function showPeriod(period) {
+            // Hide all
+            document.querySelectorAll('.period-content').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.period-tab').forEach(el => el.classList.remove('active'));
+            
+            // Show selected
+            document.getElementById('period-' + period).style.display = 'block';
+            event.target.closest('.period-tab').classList.add('active');
+        }
+    </script>
+</body>
+</html>
+
+<!-- Report Stats Template -->
+{% macro report_stats(data) %}
+<div class="stat-row">
+    <span class="text-muted"><i class="fas fa-dollar-sign"></i> Total Sales</span>
+    <strong class="text-success">R{{ data.total_sales }}</strong>
+</div>
+<div class="stat-row">
+    <span class="text-muted"><i class="fas fa-money-bill-wave"></i> Cash Sales</span>
+    <strong class="text-success">R{{ data.cash_sales }}</strong>
+</div>
+<div class="stat-row">
+    <span class="text-muted"><i class="fas fa-credit-card"></i> Credit Sales</span>
+    <strong class="text-warning">R{{ data.credit_sales }}</strong>
+</div>
+<div class="stat-row">
+    <span class="text-muted"><i class="fas fa-chart-line"></i> Net Profit</span>
+    <strong class="text-primary">R{{ data.profit }}</strong>
+</div>
+<div class="stat-row">
+    <span class="text-muted"><i class="fas fa-cigarette"></i> Sticks Sold</span>
+    <strong>{{ data.sticks_sold }}</strong>
+</div>
+<div class="stat-row">
+    <span class="text-muted"><i class="fas fa-hand-holding-usd"></i> Payments Received</span>
+    <strong class="text-info">R{{ data.payments_received }}</strong>
+</div>
+<div class="stat-row">
+    <span class="text-muted"><i class="fas fa-trophy"></i> Top Customer</span>
+    <div class="text-end">
+        <strong>{{ data.top_customer }}</strong><br>
+        <small class="text-muted">R{{ data.top_customer_amount }}</small>
+    </div>
+</div>
+{% endmacro %}

@@ -1,6 +1,7 @@
 import os
 import json
 import hashlib
+import secrets
 import firebase_admin
 from firebase_admin import credentials, firestore
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
@@ -24,22 +25,90 @@ app.secret_key = os.environ.get("SECRET_KEY", "smoketrack-secret-key-change-in-p
 # Business Constants
 BUNDLE_COST = 145.00
 STICKS_PER_BUNDLE = 200
-COST_PER_STICK = BUNDLE_COST / STICKS_PER_BUNDLE  # R0.725
+COST_PER_STICK = BUNDLE_COST / STICKS_PER_BUNDLE
 
-# Session timeout — 30 minutes
+# Credit Tiers
+TIER_NEW = {'name': 'new', 'limit': 80, 'min_points': 0}
+TIER_REGULAR = {'name': 'regular', 'limit': 100, 'min_points': 50}
+TIER_TRUSTED = {'name': 'trusted', 'limit': 120, 'min_points': 100}
+
 SESSION_TIMEOUT = timedelta(minutes=30)
 
-# ---------- AUTH HELPERS ----------
+# ---------- HELPERS ----------
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
+
+def calculate_tier(points):
+    if points >= 100: return TIER_TRUSTED
+    elif points >= 50: return TIER_REGULAR
+    else: return TIER_NEW
+
+def update_customer_tier(customer_ref, points):
+    tier_info = calculate_tier(points)
+    customer_ref.update({
+        'loyalty_points': points,
+        'tier': tier_info['name'],
+        'credit_limit': tier_info['limit']
+    })
+
+def check_overdue_penalties():
+    """Check all customers for 4-week overdue and 10% debt increase"""
+    customers = db.collection('customers').where('approved', '==', True).stream()
+    now = datetime.now(timezone.utc)
+    
+    for c in customers:
+        data = c.to_dict()
+        phone = c.id
+        
+        # Skip if no debt
+        current_debt = data.get('current_debt', 0)
+        if current_debt == 0:
+            continue
+            
+        # Check 4-week overdue
+        last_check = data.get('last_debt_check')
+        if last_check:
+            if last_check.tzinfo is None:
+                last_check = last_check.replace(tzinfo=timezone.utc)
+            weeks_overdue = (now - last_check).days / 7
+            if weeks_overdue >= 4:
+                # Deduct 2 points
+                new_points = max(0, data.get('loyalty_points', 0) - 2)
+                update_customer_tier(db.collection('customers').document(phone), new_points)
+                # Log point change
+                db.collection('point_history').add({
+                    'customer_phone': phone,
+                    'change': -2,
+                    'reason': '4 weeks overdue',
+                    'timestamp': now
+                })
+                # Reset check date
+                db.collection('customers').document(phone).update({'last_debt_check': now})
+        
+        # Check 10% debt increase
+        debt_at_check = data.get('debt_at_last_check', 0)
+        if debt_at_check > 0:
+            increase_pct = ((current_debt - debt_at_check) / debt_at_check) * 100
+            if increase_pct >= 10:
+                # Deduct 2 points
+                new_points = max(0, data.get('loyalty_points', 0) - 2)
+                update_customer_tier(db.collection('customers').document(phone), new_points)
+                # Log point change
+                db.collection('point_history').add({
+                    'customer_phone': phone,
+                    'change': -2,
+                    'reason': f'Debt increased {increase_pct:.1f}%',
+                    'timestamp': now
+                })
+                # Update baseline
+                db.collection('customers').document(phone).update({'debt_at_last_check': current_debt})
 
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if 'user' not in session:
             return redirect(url_for('login'))
-        # Check session timeout
         last_active = session.get('last_active')
         if last_active and datetime.now() > datetime.fromisoformat(last_active) + SESSION_TIMEOUT:
             session.clear()
@@ -48,31 +117,33 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
-# ---------- AUTH ROUTES ----------
+def customer_login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'customer_phone' not in session:
+            return redirect(url_for('customer_login'))
+        return f(*args, **kwargs)
+    return decorated
 
-@app.route('/login', methods=['GET'])
+# ---------- ADMIN AUTH ----------
+
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    if 'user' in session:
-        return redirect(url_for('dashboard'))
-    return render_template('login.html')
-
-@app.route('/login', methods=['POST'])
-def do_login():
+    if request.method == 'GET':
+        if 'user' in session:
+            return redirect(url_for('dashboard'))
+        return render_template('login.html')
+    
     data = request.json
     username = data.get('username', '').strip()
     password = data.get('password', '')
-
-    # Fetch user from Firestore
     doc = db.collection('users').document(username).get()
-    if not doc.exists:
-        return jsonify({"status": "error", "message": "Invalid username or password"})
-
-    user = doc.to_dict()
-    if user['password'] != hash_password(password):
-        return jsonify({"status": "error", "message": "Invalid username or password"})
-
+    
+    if not doc.exists or doc.to_dict()['password'] != hash_password(password):
+        return jsonify({"status": "error", "message": "Invalid credentials"})
+    
     session['user'] = username
-    session['role'] = user.get('role', 'seller')
+    session['role'] = doc.to_dict().get('role', 'seller')
     session['last_active'] = datetime.now().isoformat()
     return jsonify({"status": "success"})
 
@@ -81,128 +152,336 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# ---------- SETUP FIRST ADMIN (run once) ----------
-
 @app.route('/setup-admin', methods=['POST'])
 def setup_admin():
-    # Only allow if no users exist
-    users = db.collection('users').get()
+    users = list(db.collection('users').stream())
     if len(users) > 0:
-        return jsonify({"status": "error", "message": "Users already exist. Use login."})
-
+        return jsonify({"status": "error", "message": "Users already exist"})
+    
     data = request.json
     username = data.get('username', 'admin').strip()
     password = data.get('password', '')
-
+    
     if len(password) < 4:
-        return jsonify({"status": "error", "message": "Password must be at least 4 characters"})
-
+        return jsonify({"status": "error", "message": "Password must be 4+ characters"})
+    
     db.collection('users').document(username).set({
         'password': hash_password(password),
         'role': 'admin',
         'created': datetime.now(timezone.utc)
     })
+    return jsonify({"status": "success"})
 
-    return jsonify({"status": "success", "message": "Admin created. You can now log in."})
+# ---------- CUSTOMER AUTH ----------
 
-# ---------- DASHBOARD ----------
+@app.route('/customer/register', methods=['GET', 'POST'])
+def customer_register():
+    if request.method == 'GET':
+        return render_template('customer_register.html')
+    
+    data = request.json
+    name = data.get('name', '').strip()
+    phone = data.get('phone', '').strip()
+    house = data.get('house_number', '').strip()
+    password = data.get('password', '')
+    
+    if not all([name, phone, house, password]) or len(password) < 4:
+        return jsonify({"status": "error", "message": "All fields required, password 4+ chars"})
+    
+    # Check if phone exists
+    if db.collection('customers').document(phone).get().exists:
+        return jsonify({"status": "error", "message": "Phone number already registered"})
+    
+    db.collection('customers').document(phone).set({
+        'name': name,
+        'phone': phone,
+        'house_number': house,
+        'password_hash': hash_password(password),
+        'approved': False,
+        'credit_enabled': False,
+        'credit_limit': 80,
+        'loyalty_points': 0,
+        'tier': 'new',
+        'tier_override': False,
+        'cash_on_hand': 0,
+        'current_debt': 0,
+        'last_debt_check': datetime.now(timezone.utc),
+        'debt_at_last_check': 0,
+        'created': datetime.now(timezone.utc)
+    })
+    return jsonify({"status": "success", "message": "Registration submitted. Wait for approval."})
+
+@app.route('/customer/login', methods=['GET', 'POST'])
+def customer_login():
+    if request.method == 'GET':
+        if 'customer_phone' in session:
+            return redirect(url_for('customer_dashboard'))
+        return render_template('customer_login.html')
+    
+    data = request.json
+    phone = data.get('phone', '').strip()
+    password = data.get('password', '')
+    
+    doc = db.collection('customers').document(phone).get()
+    if not doc.exists:
+        return jsonify({"status": "error", "message": "Invalid phone or password"})
+    
+    cust = doc.to_dict()
+    if cust['password_hash'] != hash_password(password):
+        return jsonify({"status": "error", "message": "Invalid phone or password"})
+    
+    if not cust.get('approved', False):
+        return jsonify({"status": "error", "message": "Account pending approval"})
+    
+    session['customer_phone'] = phone
+    session['customer_name'] = cust['name']
+    return jsonify({"status": "success"})
+
+@app.route('/customer/logout')
+def customer_logout():
+    session.pop('customer_phone', None)
+    session.pop('customer_name', None)
+    return redirect(url_for('customer_login'))
+
+# ---------- CUSTOMER DASHBOARD ----------
+
+@app.route('/customer/dashboard')
+@customer_login_required
+def customer_dashboard():
+    phone = session['customer_phone']
+    cust = db.collection('customers').document(phone).get().to_dict()
+    
+    # Get purchase history
+    sales = db.collection('sales').where('customer', '==', cust['name']).order_by('timestamp', direction=firestore.Query.DESCENDING).limit(20).stream()
+    purchases = [s.to_dict() for s in sales]
+    
+    # Get payment history
+    payments = db.collection('payments').where('customer', '==', cust['name']).order_by('timestamp', direction=firestore.Query.DESCENDING).limit(20).stream()
+    payment_list = [p.to_dict() for p in payments]
+    
+    # Get orders
+    orders = db.collection('orders').where('customer_phone', '==', phone).order_by('timestamp', direction=firestore.Query.DESCENDING).limit(10).stream()
+    order_list = []
+    for o in orders:
+        od = o.to_dict()
+        od['id'] = o.id
+        order_list.append(od)
+    
+    # Point history
+    points_hist = db.collection('point_history').where('customer_phone', '==', phone).order_by('timestamp', direction=firestore.Query.DESCENDING).limit(10).stream()
+    point_list = [p.to_dict() for p in points_hist]
+    
+    # Tier progress
+    tier_info = calculate_tier(cust['loyalty_points'])
+    next_tier = None
+    points_to_next = 0
+    if tier_info['name'] == 'new':
+        next_tier = TIER_REGULAR
+        points_to_next = TIER_REGULAR['min_points'] - cust['loyalty_points']
+    elif tier_info['name'] == 'regular':
+        next_tier = TIER_TRUSTED
+        points_to_next = TIER_TRUSTED['min_points'] - cust['loyalty_points']
+    
+    return render_template('customer_dashboard.html',
+                           customer=cust,
+                           purchases=purchases,
+                           payments=payment_list,
+                           orders=order_list,
+                           point_history=point_list,
+                           next_tier=next_tier,
+                           points_to_next=points_to_next)
+
+@app.route('/customer/order', methods=['POST'])
+@customer_login_required
+def customer_create_order():
+    phone = session['customer_phone']
+    cust = db.collection('customers').document(phone).get().to_dict()
+    
+    data = request.json
+    items = data.get('items', [])  # [{'type': 'loose', 'qty': 5}, {'type': 'pack', 'qty': 2}]
+    payment_method = data.get('payment_method', 'cash')
+    
+    if not items:
+        return jsonify({"status": "error", "message": "No items selected"})
+    
+    # Calculate total
+    total = 0
+    total_sticks = 0
+    for item in items:
+        if item['type'] == 'loose':
+            total += 1.50 * item['qty']
+            total_sticks += item['qty']
+        else:  # pack
+            price_per = 40 if payment_method == 'credit' else 30
+            total += price_per * item['qty']
+            total_sticks += item['qty'] * 20
+    
+    # Check credit limit if credit
+    if payment_method == 'credit':
+        if not cust.get('credit_enabled', False):
+            return jsonify({"status": "error", "message": "Credit not enabled for your account"})
+        
+        available_credit = cust['credit_limit'] - cust['current_debt']
+        if total > available_credit:
+            return jsonify({"status": "error", "message": f"Exceeds credit limit. Available: R{available_credit:.2f}"})
+    
+    db.collection('orders').add({
+        'customer_phone': phone,
+        'customer_name': cust['name'],
+        'house_number': cust['house_number'],
+        'items': items,
+        'total': total,
+        'total_sticks': total_sticks,
+        'payment_method': payment_method,
+        'status': 'pending',
+        'timestamp': datetime.now(timezone.utc)
+    })
+    
+    return jsonify({"status": "success", "message": "Order submitted!"})
+
+@app.route('/customer/update-cash', methods=['POST'])
+@customer_login_required
+def customer_update_cash():
+    phone = session['customer_phone']
+    data = request.json
+    amount = float(data.get('amount', 0))
+    
+    db.collection('customers').document(phone).update({'cash_on_hand': amount})
+    return jsonify({"status": "success"})
+
+# ---------- ADMIN DASHBOARD ----------
 
 @app.route('/')
 @login_required
 def dashboard():
+    # Run penalty checks
+    check_overdue_penalties()
+    
     sales = list(db.collection('sales').stream())
     debtors = list(db.collection('debtors').stream())
-
+    
     cash_total = 0
     credit_total = 0
     total_sticks_sold = 0
     today = datetime.now(timezone.utc).date()
+    yesterday = today - timedelta(days=1)
     daily_sales = 0
-
-    # --- Chart data structures ---
-    # Line chart: last 30 days
+    yesterday_sales = 0
+    yesterday_profit = 0
+    
+    # Line chart last 30 days
     last_30 = {}
     for i in range(30):
         d = (datetime.now(timezone.utc) - timedelta(days=i)).date()
         last_30[d.isoformat()] = {'cash': 0, 'credit': 0, 'sticks': 0}
-
-    # Pie chart counters
+    
+    # Pie counters
     loose_total = 0
     pack_total = 0
     cash_pie = 0
     credit_pie = 0
-
+    
     for s in sales:
         data = s.to_dict()
         price = data.get('price', 0)
         qty = data.get('qty', 0)
         method = data.get('method', 'cash')
         item_type = data.get('item_type', 'pack')
-
+        
         if method == 'cash':
             cash_total += price
         else:
             credit_total += price
         total_sticks_sold += qty
-
-        # Today's sales
+        
         ts = data.get('timestamp')
         if ts:
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=timezone.utc)
-            if ts.date() == today:
+            sale_date = ts.date()
+            
+            if sale_date == today:
                 daily_sales += price
-
-            # Line chart data (last 30 days)
-            sale_date = ts.date().isoformat()
-            if sale_date in last_30:
-                last_30[sale_date]['cash' if method == 'cash' else 'credit'] += price
-                last_30[sale_date]['sticks'] += qty
-
-        # Pie: loose vs pack
+            elif sale_date == yesterday:
+                yesterday_sales += price
+                yesterday_profit += price - (qty * COST_PER_STICK)
+            
+            sale_date_iso = sale_date.isoformat()
+            if sale_date_iso in last_30:
+                last_30[sale_date_iso]['cash' if method == 'cash' else 'credit'] += price
+                last_30[sale_date_iso]['sticks'] += qty
+        
         if item_type == 'loose':
             loose_total += price
         else:
             pack_total += price
-
-        # Pie: cash vs credit
+        
         if method == 'cash':
             cash_pie += price
         else:
             credit_pie += price
-
-    # Profit calculation
+    
     total_cost = total_sticks_sold * COST_PER_STICK
     net_profit = (cash_total + credit_total) - total_cost
-
-    # Risk
+    
     if cash_total > 0:
         credit_ratio = credit_total / cash_total
         risk_level = "HIGH" if credit_ratio > 0.6 else "MEDIUM" if credit_ratio > 0.3 else "SAFE"
     else:
         risk_level = "HIGH" if credit_total > 0 else "SAFE"
-
-    # Debtor list
+    
     debtor_list = []
     for d in debtors:
         dd = d.to_dict()
         dd['name'] = d.id
         debtor_list.append(dd)
     debtor_list.sort(key=lambda x: x['balance'], reverse=True)
-
-    # Format line chart: sorted by date ascending
+    
+    # Stock calculations
+    stock_docs = list(db.collection('stock').stream())
+    total_sticks_from_stock = sum(s.to_dict()['sticks'] for s in stock_docs)
+    sticks_remaining = total_sticks_from_stock - total_sticks_sold
+    
+    # Stock alert level
+    stock_alert = "out" if sticks_remaining <= 0 else "low" if sticks_remaining < 200 else "safe"
+    
+    # Goals
+    goals_doc = db.collection('settings').document('goals').get()
+    if goals_doc.exists:
+        goals = goals_doc.to_dict()
+    else:
+        goals = {'daily': 500, 'monthly': 15000}
+    
+    # Calculate monthly sales
+    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    monthly_sales = sum(s.to_dict()['price'] for s in sales if s.to_dict().get('timestamp', datetime.now(timezone.utc)) >= month_start)
+    
+    # Cash flow forecast
+    if daily_sales > 0 and sticks_remaining > 0:
+        avg_sticks_per_day = total_sticks_sold / max(1, (datetime.now(timezone.utc) - month_start).days)
+        days_until_out = int(sticks_remaining / max(1, avg_sticks_per_day))
+        bundles_needed = max(1, int((avg_sticks_per_day * 7) / STICKS_PER_BUNDLE))
+    else:
+        days_until_out = 0
+        bundles_needed = 1
+    
+    # Pending orders & customers
+    pending_orders = db.collection('orders').where('status', '==', 'pending').stream()
+    pending_order_count = len(list(pending_orders))
+    
+    pending_customers = db.collection('customers').where('approved', '==', False).stream()
+    pending_customer_count = len(list(pending_customers))
+    
+    # Chart data
     line_labels = sorted(last_30.keys())
     line_cash = [last_30[d]['cash'] for d in line_labels]
     line_credit = [last_30[d]['credit'] for d in line_labels]
     line_sticks = [last_30[d]['sticks'] for d in line_labels]
-    # Shorten labels to "DD MMM"
     line_labels_display = [datetime.fromisoformat(d).strftime('%d %b') for d in line_labels]
-
-    # Profit vs Cost pie
-    total_revenue = cash_total + credit_total
-    profit_pie = max(0, total_revenue - total_cost)
+    
+    profit_pie = max(0, (cash_total + credit_total) - total_cost)
     cost_pie = total_cost
-
+    
     return render_template('dashboard.html',
                            cash=round(cash_total, 2),
                            credit=round(credit_total, 2),
@@ -211,7 +490,17 @@ def dashboard():
                            risk=risk_level,
                            debtors=debtor_list,
                            sticks_sold=total_sticks_sold,
-                           # Chart data
+                           sticks_remaining=sticks_remaining,
+                           stock_alert=stock_alert,
+                           yesterday_sales=round(yesterday_sales, 2),
+                           yesterday_profit=round(yesterday_profit, 2),
+                           daily_goal=goals['daily'],
+                           monthly_goal=goals['monthly'],
+                           monthly_sales=round(monthly_sales, 2),
+                           days_until_out=days_until_out,
+                           bundles_needed=bundles_needed,
+                           pending_orders=pending_order_count,
+                           pending_customers=pending_customer_count,
                            line_labels=line_labels_display,
                            line_cash=line_cash,
                            line_credit=line_credit,
@@ -225,8 +514,6 @@ def dashboard():
                            user=session.get('user'),
                            role=session.get('role'))
 
-# ---------- SELL ----------
-
 @app.route('/sell', methods=['POST'])
 @login_required
 def process_sale():
@@ -234,24 +521,26 @@ def process_sale():
     item = data['item']
     method = data['method']
     qty = int(data.get('qty', 1))
-
+    
     if item == 'loose':
         price = 1.50 * qty
+        sticks = qty
     else:
         unit_price = 40.00 if method == 'credit' else 30.00
         price = unit_price * qty
-
+        sticks = qty * 20
+    
     customer_name = data.get('name', 'Cash Customer')
-
+    
     db.collection('sales').add({
-        'qty': qty if item == 'loose' else qty * 20,
+        'qty': sticks,
         'price': price,
         'method': method,
         'customer': customer_name,
         'timestamp': datetime.now(timezone.utc),
         'item_type': item
     })
-
+    
     if method == 'credit':
         debtor_ref = db.collection('debtors').document(customer_name)
         doc = debtor_ref.get()
@@ -267,17 +556,37 @@ def process_sale():
                 'created': datetime.now(timezone.utc),
                 'last_purchase': datetime.now(timezone.utc)
             })
-
-    sticks = qty if item == 'loose' else qty * 20
+        
+        # Update customer debt and points
+        cust = db.collection('customers').where('name', '==', customer_name).limit(1).stream()
+        for c in cust:
+            phone = c.id
+            cust_data = c.to_dict()
+            new_debt = cust_data.get('current_debt', 0) + price
+            new_points = cust_data.get('loyalty_points', 0) + (sticks // 20)
+            
+            db.collection('customers').document(phone).update({
+                'current_debt': new_debt,
+                'loyalty_points': new_points
+            })
+            
+            # Log points
+            if sticks >= 20:
+                db.collection('point_history').add({
+                    'customer_phone': phone,
+                    'change': sticks // 20,
+                    'reason': f'Purchase: {sticks} sticks',
+                    'timestamp': datetime.now(timezone.utc)
+                })
+            
+            update_customer_tier(db.collection('customers').document(phone), new_points)
+    
     profit_made = price - (sticks * COST_PER_STICK)
-
     return jsonify({
         "status": "success",
         "profit_made": round(profit_made, 2),
         "price": round(price, 2)
     })
-
-# ---------- PAYMENT ----------
 
 @app.route('/payment', methods=['POST'])
 @login_required
@@ -285,16 +594,15 @@ def record_payment():
     data = request.json
     name = data['name']
     amount = float(data['amount'])
-
+    
     debtor_ref = db.collection('debtors').document(name)
     doc = debtor_ref.get()
-
     if not doc.exists:
         return jsonify({"status": "error", "message": "Debtor not found"}), 404
-
+    
     current_balance = doc.to_dict()['balance']
     new_balance = max(0, current_balance - amount)
-
+    
     if new_balance == 0:
         debtor_ref.delete()
     else:
@@ -302,7 +610,7 @@ def record_payment():
             'balance': new_balance,
             'last_payment': datetime.now(timezone.utc)
         })
-
+    
     db.collection('payments').add({
         'customer': name,
         'amount': amount,
@@ -310,15 +618,208 @@ def record_payment():
         'previous_balance': current_balance,
         'new_balance': new_balance
     })
-
+    
+    # Update customer debt and give bonus points
+    cust = db.collection('customers').where('name', '==', name).limit(1).stream()
+    for c in cust:
+        phone = c.id
+        cust_data = c.to_dict()
+        new_debt = max(0, cust_data.get('current_debt', 0) - amount)
+        new_points = cust_data.get('loyalty_points', 0) + 5  # Bonus
+        
+        db.collection('customers').document(phone).update({
+            'current_debt': new_debt,
+            'loyalty_points': new_points,
+            'last_debt_check': datetime.now(timezone.utc),
+            'debt_at_last_check': new_debt
+        })
+        
+        db.collection('point_history').add({
+            'customer_phone': phone,
+            'change': 5,
+            'reason': f'Payment: R{amount:.2f}',
+            'timestamp': datetime.now(timezone.utc)
+        })
+        
+        update_customer_tier(db.collection('customers').document(phone), new_points)
+    
     return jsonify({
         "status": "success",
         "new_balance": round(new_balance, 2),
         "paid_in_full": new_balance == 0
     })
 
-# ---------- DEBTORS PAGE ----------
+@app.route('/update-goals', methods=['POST'])
+@login_required
+def update_goals():
+    data = request.json
+    db.collection('settings').document('goals').set({
+        'daily': float(data.get('daily', 500)),
+        'monthly': float(data.get('monthly', 15000))
+    })
+    return jsonify({"status": "success"})
 
+# Orders management
+@app.route('/orders')
+@login_required
+def view_orders():
+    orders = db.collection('orders').order_by('timestamp', direction=firestore.Query.DESCENDING).stream()
+    order_list = []
+    for o in orders:
+        od = o.to_dict()
+        od['id'] = o.id
+        order_list.append(od)
+    
+    return render_template('orders.html', orders=order_list, user=session.get('user'), role=session.get('role'))
+
+@app.route('/orders/update', methods=['POST'])
+@login_required
+def update_order_status():
+    data = request.json
+    order_id = data['order_id']
+    status = data['status']  # approved, completed, rejected
+    
+    order_ref = db.collection('orders').document(order_id)
+    order = order_ref.get()
+    if not order.exists:
+        return jsonify({"status": "error", "message": "Order not found"}), 404
+    
+    order_data = order.to_dict()
+    order_ref.update({'status': status})
+    
+    # If completed, create sale
+    if status == 'completed':
+        total_sticks = order_data['total_sticks']
+        total_price = order_data['total']
+        method = order_data['payment_method']
+        customer_name = order_data['customer_name']
+        
+        db.collection('sales').add({
+            'qty': total_sticks,
+            'price': total_price,
+            'method': method,
+            'customer': customer_name,
+            'timestamp': datetime.now(timezone.utc),
+            'item_type': 'pack',
+            'from_order': order_id
+        })
+        
+        if method == 'credit':
+            debtor_ref = db.collection('debtors').document(customer_name)
+            if debtor_ref.get().exists:
+                debtor_ref.update({'balance': firestore.Increment(total_price)})
+            else:
+                debtor_ref.set({'balance': total_price, 'trust_score': 50, 'created': datetime.now(timezone.utc)})
+            
+            # Update customer
+            phone = order_data['customer_phone']
+            cust_ref = db.collection('customers').document(phone)
+            cust = cust_ref.get().to_dict()
+            new_debt = cust.get('current_debt', 0) + total_price
+            new_points = cust.get('loyalty_points', 0) + (total_sticks // 20)
+            
+            cust_ref.update({'current_debt': new_debt, 'loyalty_points': new_points})
+            update_customer_tier(cust_ref, new_points)
+    
+    return jsonify({"status": "success"})
+
+# Customer management
+@app.route('/customers')
+@login_required
+def view_customers():
+    customers = db.collection('customers').stream()
+    cust_list = []
+    for c in customers:
+        cd = c.to_dict()
+        cd['phone'] = c.id
+        cust_list.append(cd)
+    
+    cust_list.sort(key=lambda x: x['loyalty_points'], reverse=True)
+    return render_template('customers.html', customers=cust_list, user=session.get('user'), role=session.get('role'))
+
+@app.route('/customers/approve', methods=['POST'])
+@login_required
+def approve_customer():
+    data = request.json
+    phone = data['phone']
+    db.collection('customers').document(phone).update({'approved': True})
+    return jsonify({"status": "success"})
+
+@app.route('/customers/toggle-credit', methods=['POST'])
+@login_required
+def toggle_credit():
+    data = request.json
+    phone = data['phone']
+    enabled = data['enabled']
+    db.collection('customers').document(phone).update({'credit_enabled': enabled})
+    return jsonify({"status": "success"})
+
+@app.route('/customers/update-limit', methods=['POST'])
+@login_required
+def update_credit_limit():
+    data = request.json
+    phone = data['phone']
+    limit = float(data['limit'])
+    db.collection('customers').document(phone).update({'credit_limit': limit, 'tier_override': True})
+    return jsonify({"status": "success"})
+
+@app.route('/customers/blacklist', methods=['POST'])
+@login_required
+def blacklist_customer():
+    data = request.json
+    phone = data['phone']
+    blacklisted = data['blacklisted']
+    db.collection('customers').document(phone).update({'credit_enabled': not blacklisted})
+    return jsonify({"status": "success"})
+
+# Insights page
+@app.route('/insights')
+@login_required
+def view_insights():
+    sales = list(db.collection('sales').stream())
+    customers_col = list(db.collection('customers').where('approved', '==', True).stream())
+    
+    # Top customers by spending
+    customer_spending = {}
+    for s in sales:
+        data = s.to_dict()
+        cust = data.get('customer', 'Cash Customer')
+        if cust not in customer_spending:
+            customer_spending[cust] = 0
+        customer_spending[cust] += data.get('price', 0)
+    
+    top_customers = sorted(customer_spending.items(), key=lambda x: x[1], reverse=True)[:5]
+    
+    # Most reliable payers (lowest debt ratio)
+    reliable_payers = []
+    for c in customers_col:
+        cd = c.to_dict()
+        cd['phone'] = c.id
+        if cd.get('loyalty_points', 0) > 0:
+            debt_ratio = cd.get('current_debt', 0) / max(1, cd.get('loyalty_points', 1))
+            cd['debt_ratio'] = debt_ratio
+            reliable_payers.append(cd)
+    
+    reliable_payers.sort(key=lambda x: x['debt_ratio'])
+    reliable_payers = reliable_payers[:5]
+    
+    # Worst debtors
+    worst_debtors = sorted(customers_col, key=lambda x: x.to_dict().get('current_debt', 0), reverse=True)[:5]
+    worst_debtor_list = []
+    for w in worst_debtors:
+        wd = w.to_dict()
+        wd['phone'] = w.id
+        if wd.get('current_debt', 0) > 0:
+            worst_debtor_list.append(wd)
+    
+    return render_template('insights.html',
+                           top_customers=top_customers,
+                           reliable_payers=reliable_payers,
+                           worst_debtors=worst_debtor_list,
+                           user=session.get('user'),
+                           role=session.get('role'))
+
+# Other existing routes (debtors, history, stock, etc.)
 @app.route('/debtors')
 @login_required
 def view_debtors():
@@ -331,13 +832,7 @@ def view_debtors():
         debtor_list.append(data)
         total_owed += data['balance']
     debtor_list.sort(key=lambda x: x['balance'], reverse=True)
-    return render_template('debtors.html',
-                           debtors=debtor_list,
-                           total_owed=round(total_owed, 2),
-                           user=session.get('user'),
-                           role=session.get('role'))
-
-# ---------- HISTORY ----------
+    return render_template('debtors.html', debtors=debtor_list, total_owed=round(total_owed, 2), user=session.get('user'), role=session.get('role'))
 
 @app.route('/history')
 @login_required
@@ -348,12 +843,7 @@ def view_history():
         data = s.to_dict()
         data['id'] = s.id
         sales_list.append(data)
-    return render_template('history.html',
-                           sales=sales_list,
-                           user=session.get('user'),
-                           role=session.get('role'))
-
-# ---------- STOCK ----------
+    return render_template('history.html', sales=sales_list, user=session.get('user'), role=session.get('role'))
 
 @app.route('/stock')
 @login_required
@@ -363,7 +853,6 @@ def view_stock():
     total_bundles = 0
     total_spent = 0
     total_sticks_from_stock = 0
-
     for doc in stock_docs:
         data = doc.to_dict()
         data['id'] = doc.id
@@ -371,7 +860,6 @@ def view_stock():
         total_bundles += data['bundles']
         total_spent += data['cost']
         total_sticks_from_stock += data['bundles'] * STICKS_PER_BUNDLE
-
     monthly = {}
     for s in stock_list:
         month_key = s['date'].strftime('%B %Y')
@@ -380,23 +868,10 @@ def view_stock():
         monthly[month_key]['bundles'] += s['bundles']
         monthly[month_key]['cost'] += s['cost']
         monthly[month_key]['entries'].append(s)
-
     sales = db.collection('sales').stream()
     total_sticks_sold = sum(s.to_dict()['qty'] for s in sales)
     sticks_remaining = total_sticks_from_stock - total_sticks_sold
-
-    return render_template('stock.html',
-                           stock_list=stock_list,
-                           monthly=monthly,
-                           total_bundles=total_bundles,
-                           total_spent=total_spent,
-                           total_sticks_from_stock=total_sticks_from_stock,
-                           total_sticks_sold=total_sticks_sold,
-                           sticks_remaining=sticks_remaining,
-                           bundle_cost=BUNDLE_COST,
-                           sticks_per_bundle=STICKS_PER_BUNDLE,
-                           user=session.get('user'),
-                           role=session.get('role'))
+    return render_template('stock.html', stock_list=stock_list, monthly=monthly, total_bundles=total_bundles, total_spent=total_spent, total_sticks_from_stock=total_sticks_from_stock, total_sticks_sold=total_sticks_sold, sticks_remaining=sticks_remaining, bundle_cost=BUNDLE_COST, sticks_per_bundle=STICKS_PER_BUNDLE, user=session.get('user'), role=session.get('role'))
 
 @app.route('/stock/add', methods=['POST'])
 @login_required
@@ -408,21 +883,8 @@ def add_stock():
         purchase_date = datetime.strptime(data['date'], '%Y-%m-%d').replace(tzinfo=timezone.utc)
     else:
         purchase_date = datetime.now(timezone.utc)
-
-    db.collection('stock').add({
-        'bundles': bundles,
-        'sticks': bundles * STICKS_PER_BUNDLE,
-        'cost': cost,
-        'date': purchase_date,
-        'note': data.get('note', '')
-    })
-
-    return jsonify({
-        "status": "success",
-        "bundles": bundles,
-        "sticks": bundles * STICKS_PER_BUNDLE,
-        "cost": cost
-    })
+    db.collection('stock').add({'bundles': bundles, 'sticks': bundles * STICKS_PER_BUNDLE, 'cost': cost, 'date': purchase_date, 'note': data.get('note', '')})
+    return jsonify({"status": "success", "bundles": bundles, "sticks": bundles * STICKS_PER_BUNDLE, "cost": cost})
 
 @app.route('/stock/delete', methods=['POST'])
 @login_required
@@ -434,8 +896,6 @@ def delete_stock():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# ---------- RECENT TRANSACTIONS ----------
-
 @app.route('/recent-transactions')
 @login_required
 def recent_transactions():
@@ -443,12 +903,10 @@ def recent_transactions():
         sales = db.collection('sales').order_by('timestamp', direction=firestore.Query.DESCENDING).limit(10).stream()
         transactions = []
         now = datetime.now(timezone.utc)
-
         for s in sales:
             data = s.to_dict()
             if 'price' not in data or 'qty' not in data:
                 continue
-
             ts = data.get('timestamp')
             if ts is None:
                 time_ago = "Unknown"
@@ -466,25 +924,100 @@ def recent_transactions():
                 else:
                     d = (now - ts).days
                     time_ago = f"{d} day{'s' if d > 1 else ''} ago"
-
             profit = data['price'] - (data['qty'] * COST_PER_STICK)
-            transactions.append({
-                'id': s.id,
-                'customer': data.get('customer', 'Unknown'),
-                'method': data.get('method', 'cash'),
-                'item_type': data.get('item_type', 'pack'),
-                'price': data['price'],
-                'qty': data['qty'],
-                'profit': round(profit, 2),
-                'time_ago': time_ago
-            })
-
+            transactions.append({'id': s.id, 'customer': data.get('customer', 'Unknown'), 'method': data.get('method', 'cash'), 'item_type': data.get('item_type', 'pack'), 'price': data['price'], 'qty': data['qty'], 'profit': round(profit, 2), 'time_ago': time_ago})
         return jsonify({'transactions': transactions})
     except Exception as e:
         print(f"ERROR in recent_transactions: {e}")
         return jsonify({'transactions': [], 'error': str(e)}), 500
 
-# ---------- DELETE TRANSACTION ----------
+@app.route('/reports')
+@login_required
+def view_reports():
+    """Summary reports page"""
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    yesterday_start = today_start - timedelta(days=1)
+    week_start = today_start - timedelta(days=today_start.weekday())  # Monday
+    last_week_start = week_start - timedelta(days=7)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if month_start.month == 1:
+        last_month_start = month_start.replace(year=month_start.year - 1, month=12)
+    else:
+        last_month_start = month_start.replace(month=month_start.month - 1)
+    
+    def get_period_data(start, end):
+        sales = db.collection('sales').where('timestamp', '>=', start).where('timestamp', '<', end).stream()
+        payments = db.collection('payments').where('timestamp', '>=', start).where('timestamp', '<', end).stream()
+        
+        total_sales = 0
+        total_sticks = 0
+        cash_sales = 0
+        credit_sales = 0
+        customer_sales = {}
+        
+        for s in sales:
+            data = s.to_dict()
+            price = data.get('price', 0)
+            qty = data.get('qty', 0)
+            method = data.get('method', 'cash')
+            customer = data.get('customer', 'Cash Customer')
+            
+            total_sales += price
+            total_sticks += qty
+            
+            if method == 'cash':
+                cash_sales += price
+            else:
+                credit_sales += price
+            
+            if customer not in customer_sales:
+                customer_sales[customer] = 0
+            customer_sales[customer] += price
+        
+        total_payments = sum(p.to_dict().get('amount', 0) for p in payments)
+        profit = total_sales - (total_sticks * COST_PER_STICK)
+        top_customer = max(customer_sales.items(), key=lambda x: x[1]) if customer_sales else ('None', 0)
+        
+        return {
+            'total_sales': round(total_sales, 2),
+            'cash_sales': round(cash_sales, 2),
+            'credit_sales': round(credit_sales, 2),
+            'profit': round(profit, 2),
+            'sticks_sold': total_sticks,
+            'payments_received': round(total_payments, 2),
+            'top_customer': top_customer[0],
+            'top_customer_amount': round(top_customer[1], 2)
+        }
+    
+    # Get all periods
+    today = get_period_data(today_start, now)
+    yesterday = get_period_data(yesterday_start, today_start)
+    this_week = get_period_data(week_start, now)
+    last_week = get_period_data(last_week_start, week_start)
+    this_month = get_period_data(month_start, now)
+    last_month = get_period_data(last_month_start, month_start)
+    
+    # Calculate comparisons
+    def calc_change(current, previous):
+        if previous == 0:
+            return 0
+        return round(((current - previous) / previous) * 100, 1)
+    
+    week_change = calc_change(this_week['total_sales'], last_week['total_sales'])
+    month_change = calc_change(this_month['total_sales'], last_month['total_sales'])
+    
+    return render_template('reports.html',
+                           today=today,
+                           yesterday=yesterday,
+                           this_week=this_week,
+                           last_week=last_week,
+                           this_month=this_month,
+                           last_month=last_month,
+                           week_change=week_change,
+                           month_change=month_change,
+                           user=session.get('user'),
+                           role=session.get('role'))
 
 @app.route('/delete-transaction', methods=['POST'])
 @login_required
@@ -494,9 +1027,7 @@ def delete_transaction():
         doc = db.collection('sales').document(data['transaction_id']).get()
         if not doc.exists:
             return jsonify({"status": "error", "message": "Transaction not found"}), 404
-
         trans_data = doc.to_dict()
-
         if trans_data['method'] == 'credit':
             customer_name = trans_data['customer']
             amount = trans_data['price']
@@ -508,7 +1039,6 @@ def delete_transaction():
                     debtor_ref.delete()
                 else:
                     debtor_ref.update({'balance': new_balance})
-
         db.collection('sales').document(data['transaction_id']).delete()
         return jsonify({"status": "success", "message": "Transaction deleted"})
     except Exception as e:

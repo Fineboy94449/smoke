@@ -51,6 +51,83 @@
         .alert-warning { background-color: #3d3520; border-color: #ffc107; color: #ffdd57; }
         .chart-container { position: relative; height: 260px; }
         .user-badge { font-size: 0.85rem; }
+        .calc-float-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ffc107, #ff9800);
+            color: #1a1a1a;
+            font-size: 1.5rem;
+            border: none;
+            box-shadow: 0 4px 12px rgba(255,193,7,0.5);
+            cursor: pointer;
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+        .calc-float-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(255,193,7,0.7);
+        }
+        .calc-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        .calc-modal.show { display: flex; }
+        .calc-content {
+            background: #252525;
+            border: 2px solid #ffc107;
+            border-radius: 16px;
+            padding: 24px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 8px 32px rgba(255,193,7,0.3);
+        }
+        .calc-mode-btn {
+            padding: 8px 16px;
+            margin: 0 4px;
+            border-radius: 8px;
+            border: 1px solid #4d4d4d;
+            background: #2d2d2d;
+            color: #e0e0e0;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .calc-mode-btn.active {
+            background: #ffc107;
+            color: #1a1a1a;
+            border-color: #ffc107;
+        }
+        .calc-input {
+            font-size: 1.5rem;
+            text-align: center;
+            padding: 12px;
+            background: #1f1f1f;
+            border: 2px solid #4d4d4d;
+            color: #e0e0e0;
+            border-radius: 10px;
+        }
+        .calc-input:focus {
+            border-color: #ffc107;
+            outline: none;
+        }
+        .calc-result {
+            background: #1f1f1f;
+            border: 2px solid #28a745;
+            border-radius: 10px;
+            padding: 16px;
+            margin-top: 12px;
+        }
     </style>
 </head>
 <body>
@@ -61,6 +138,7 @@
             <div class="d-flex align-items-center gap-2">
                 <span class="badge bg-dark border user-badge"><i class="fas fa-user"></i> {{ user }}</span>
                 <a href="/stock" class="btn btn-outline-warning btn-sm"><i class="fas fa-boxes"></i> Stock</a>
+                <a href="/reports" class="btn btn-outline-info btn-sm"><i class="fas fa-file-alt"></i> Reports</a>
                 <a href="/debtors" class="btn btn-outline-warning btn-sm"><i class="fas fa-users"></i> Debtors</a>
                 <a href="/history" class="btn btn-outline-light btn-sm"><i class="fas fa-history"></i> History</a>
                 <a href="/logout" class="btn btn-outline-danger btn-sm"><i class="fas fa-sign-out-alt"></i></a>
@@ -247,6 +325,83 @@
 
         <div class="text-center text-muted mb-4">
             <small>Sticks Sold: {{ sticks_sold }} | Cost/Stick: R0.725 | Bundle: R145.00</small>
+        </div>
+    </div>
+
+    <!-- FLOATING CALCULATOR BUTTON -->
+    <button class="calc-float-btn" onclick="openCalc()">
+        <i class="fas fa-calculator"></i>
+    </button>
+
+    <!-- CALCULATOR MODAL -->
+    <div class="calc-modal" id="calcModal" onclick="closeCalc(event)">
+        <div class="calc-content" onclick="event.stopPropagation()">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0 text-warning"><i class="fas fa-calculator"></i> Quick Calculator</h5>
+                <button class="btn btn-sm btn-outline-danger" onclick="closeCalc()">✕</button>
+            </div>
+
+            <!-- Mode Selection -->
+            <div class="text-center mb-3">
+                <button class="calc-mode-btn active" id="modeMoneyBtn" onclick="switchMode('money')">
+                    Money → Sticks
+                </button>
+                <button class="calc-mode-btn" id="modeSticksBtn" onclick="switchMode('sticks')">
+                    Sticks → Change
+                </button>
+            </div>
+
+            <!-- Mode 1: Money to Sticks -->
+            <div id="modeMoneyContent">
+                <label class="text-muted small">Item Type</label>
+                <select class="form-control mb-2" id="calcItemType" onchange="calculateMoney()">
+                    <option value="loose">Loose Sticks (R1.50 each)</option>
+                    <option value="pack_cash">Pack - Cash (R30 each)</option>
+                    <option value="pack_credit">Pack - Credit (R40 each)</option>
+                </select>
+
+                <label class="text-muted small">Customer Gives</label>
+                <input type="number" class="form-control calc-input mb-2" id="moneyAmount" 
+                       placeholder="e.g., 10" min="0" step="0.5" oninput="calculateMoney()">
+
+                <div class="calc-result" id="moneyResult" style="display:none;">
+                    <div class="text-success mb-2">
+                        <i class="fas fa-check-circle"></i> <strong>Give Customer:</strong>
+                    </div>
+                    <h4 class="text-warning mb-1" id="moneySticks">—</h4>
+                    <div class="text-muted small" id="moneyCost">Cost: R—</div>
+                    <div class="text-success small" id="moneyChange">Change: R—</div>
+                </div>
+            </div>
+
+            <!-- Mode 2: Sticks to Change -->
+            <div id="modeSticksContent" style="display:none;">
+                <label class="text-muted small">Item Type</label>
+                <select class="form-control mb-2" id="calcItemType2" onchange="calculateSticks()">
+                    <option value="loose">Loose Sticks (R1.50 each)</option>
+                    <option value="pack_cash">Pack - Cash (R30 each)</option>
+                    <option value="pack_credit">Pack - Credit (R40 each)</option>
+                </select>
+
+                <label class="text-muted small">Quantity</label>
+                <input type="number" class="form-control calc-input mb-2" id="sticksQty" 
+                       placeholder="e.g., 5" min="1" step="1" oninput="calculateSticks()">
+
+                <label class="text-muted small">Customer Pays</label>
+                <input type="number" class="form-control calc-input mb-2" id="sticksPaid" 
+                       placeholder="e.g., 50" min="0" step="0.5" oninput="calculateSticks()">
+
+                <div class="calc-result" id="sticksResult" style="display:none;">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Total Cost:</span>
+                        <strong class="text-warning" id="sticksCost">R—</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted">Change:</span>
+                        <strong class="text-success" id="sticksChange">R—</strong>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
