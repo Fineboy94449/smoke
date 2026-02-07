@@ -630,6 +630,88 @@
         pieChart.data.datasets[0].backgroundColor = pieData[type].colors;
         pieChart.update();
     }
+
+    // ---------- CALCULATOR ----------
+    function openCalc() {
+        document.getElementById('calcModal').classList.add('show');
+    }
+
+    function closeCalc(event) {
+        if (event && event.target.id !== 'calcModal') return;
+        document.getElementById('calcModal').classList.remove('show');
+    }
+
+    function switchMode(mode) {
+        if (mode === 'money') {
+            document.getElementById('modeMoneyContent').style.display = 'block';
+            document.getElementById('modeSticksContent').style.display = 'none';
+            document.getElementById('modeMoneyBtn').classList.add('active');
+            document.getElementById('modeSticksBtn').classList.remove('active');
+        } else {
+            document.getElementById('modeMoneyContent').style.display = 'none';
+            document.getElementById('modeSticksContent').style.display = 'block';
+            document.getElementById('modeMoneyBtn').classList.remove('active');
+            document.getElementById('modeSticksBtn').classList.add('active');
+        }
+    }
+
+    function calculateMoney() {
+        const itemType = document.getElementById('calcItemType').value;
+        const amount = parseFloat(document.getElementById('moneyAmount').value) || 0;
+        
+        let pricePerUnit, unitName;
+        if (itemType === 'loose') {
+            pricePerUnit = 1.50;
+            unitName = 'sticks';
+        } else if (itemType === 'pack_cash') {
+            pricePerUnit = 30.00;
+            unitName = 'packs';
+        } else {
+            pricePerUnit = 40.00;
+            unitName = 'packs';
+        }
+
+        if (amount <= 0) {
+            document.getElementById('moneyResult').style.display = 'none';
+            return;
+        }
+
+        const qty = Math.floor(amount / pricePerUnit);
+        const cost = qty * pricePerUnit;
+        const change = amount - cost;
+
+        document.getElementById('moneySticks').textContent = qty + ' ' + unitName;
+        document.getElementById('moneyCost').textContent = 'Cost: R' + cost.toFixed(2);
+        document.getElementById('moneyChange').textContent = 'Change: R' + change.toFixed(2);
+        document.getElementById('moneyResult').style.display = 'block';
+    }
+
+    function calculateSticks() {
+        const itemType = document.getElementById('calcItemType2').value;
+        const qty = parseInt(document.getElementById('sticksQty').value) || 0;
+        const paid = parseFloat(document.getElementById('sticksPaid').value) || 0;
+
+        let pricePerUnit;
+        if (itemType === 'loose') {
+            pricePerUnit = 1.50;
+        } else if (itemType === 'pack_cash') {
+            pricePerUnit = 30.00;
+        } else {
+            pricePerUnit = 40.00;
+        }
+
+        if (qty <= 0 || paid <= 0) {
+            document.getElementById('sticksResult').style.display = 'none';
+            return;
+        }
+
+        const cost = qty * pricePerUnit;
+        const change = paid - cost;
+
+        document.getElementById('sticksCost').textContent = 'R' + cost.toFixed(2);
+        document.getElementById('sticksChange').textContent = change >= 0 ? 'R' + change.toFixed(2) : '(R' + Math.abs(change).toFixed(2) + ')';
+        document.getElementById('sticksResult').style.display = 'block';
+    }
     </script>
 </body>
 </html>
