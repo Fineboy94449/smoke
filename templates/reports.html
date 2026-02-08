@@ -126,13 +126,13 @@
                 <!-- Today -->
                 <div id="period-today" class="period-content">
                     <h5 class="text-warning mb-3">📅 Today's Summary</h5>
-                    {% include 'report_stats.html' with data=today %}
+                    {{ report_stats(today) }}
                 </div>
 
                 <!-- Yesterday -->
                 <div id="period-yesterday" class="period-content" style="display:none;">
                     <h5 class="text-warning mb-3">📅 Yesterday's Summary</h5>
-                    {% include 'report_stats.html' with data=yesterday %}
+                    {{ report_stats(yesterday) }}
                 </div>
 
                 <!-- This Week -->
@@ -145,13 +145,13 @@
                         </span>
                     </div>
                     {% endif %}
-                    {% include 'report_stats.html' with data=this_week %}
+                    {{ report_stats(this_week) }}
                 </div>
 
                 <!-- Last Week -->
                 <div id="period-lastweek" class="period-content" style="display:none;">
                     <h5 class="text-warning mb-3">📅 Last Week</h5>
-                    {% include 'report_stats.html' with data=last_week %}
+                    {{ report_stats(last_week) }}
                 </div>
 
                 <!-- This Month -->
@@ -164,13 +164,13 @@
                         </span>
                     </div>
                     {% endif %}
-                    {% include 'report_stats.html' with data=this_month %}
+                    {{ report_stats(this_month) }}
                 </div>
 
                 <!-- Last Month -->
                 <div id="period-lastmonth" class="period-content" style="display:none;">
                     <h5 class="text-warning mb-3">📅 Last Month</h5>
-                    {% include 'report_stats.html' with data=last_month %}
+                    {{ report_stats(last_month) }}
                 </div>
 
                 <!-- Bundles -->
