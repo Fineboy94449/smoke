@@ -86,24 +86,44 @@
             </div>
             <div class="card-body">
                 <div class="row g-3 align-items-end">
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <label class="form-label text-muted">Date of Purchase</label>
                         <input type="date" id="stockDate" class="form-control form-control-lg">
                     </div>
                     <div class="col-md-2">
                         <label class="form-label text-muted">Bundles Bought</label>
                         <input type="number" id="stockBundles" class="form-control form-control-lg" 
-                               placeholder="9" min="1" max="999">
+                               placeholder="9" min="1" max="999" oninput="updateStockCost()">
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label text-muted">Total Cost (R)</label>
+                        <label class="form-label text-muted">Transport Cost</label>
+                        <input type="number" id="transportCost" class="form-control form-control-lg" 
+                               placeholder="0" min="0" step="0.5" oninput="updateStockCost()">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label text-muted">Total Cost</label>
                         <input type="text" id="stockCostDisplay" class="form-control form-control-lg" 
                                placeholder="R0.00" disabled>
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label text-muted">Note (optional)</label>
-                        <input type="text" id="stockNote" class="form-control form-control-lg" 
-                               placeholder="e.g. bought from wholesaler">
+                    <div class="col-md-2">
+                        <label class="form-label text-muted">Who Paid?</label>
+                        <select id="paymentSource" class="form-control form-control-lg">
+                            <option value="personal">My Pocket</option>
+                            <option value="business">Business Cash</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label text-muted">Transport By</label>
+                        <select id="transportSource" class="form-control form-control-lg">
+                            <option value="personal">My Pocket</option>
+                            <option value="business">Business Cash</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-10">
+                        <input type="text" id="stockNote" class="form-control" 
+                               placeholder="Note (optional) - e.g. bought from wholesaler">
                     </div>
                     <div class="col-md-2">
                         <button class="btn btn-warning btn-lg w-100" onclick="addStock()">
@@ -247,17 +267,25 @@
         // Set today's date as default
         document.getElementById('stockDate').valueAsDate = new Date();
 
-        // Auto-calculate cost when bundles change
-        document.getElementById('stockBundles').addEventListener('input', function() {
-            const bundles = parseInt(this.value) || 0;
-            const cost = bundles * 144.00;
-            document.getElementById('stockCostDisplay').value = 'R' + cost.toFixed(2);
-        });
+        // Auto-calculate cost when bundles or transport change
+        function updateStockCost() {
+            const bundles = parseInt(document.getElementById('stockBundles').value) || 0;
+            const transport = parseFloat(document.getElementById('transportCost').value) || 0;
+            const stockCost = bundles * 145.00;
+            const total = stockCost + transport;
+            document.getElementById('stockCostDisplay').value = 'R' + total.toFixed(2);
+        }
+
+        document.getElementById('stockBundles').addEventListener('input', updateStockCost);
+        document.getElementById('transportCost').addEventListener('input', updateStockCost);
 
         function addStock() {
             const bundles = parseInt(document.getElementById('stockBundles').value);
             const date = document.getElementById('stockDate').value;
             const note = document.getElementById('stockNote').value.trim();
+            const transportCost = parseFloat(document.getElementById('transportCost').value) || 0;
+            const paymentSource = document.getElementById('paymentSource').value;
+            const transportSource = document.getElementById('transportSource').value;
 
             if (!bundles || bundles < 1) {
                 alert('Please enter how many bundles you bought!');
@@ -276,13 +304,22 @@
                 body: JSON.stringify({
                     bundles: bundles,
                     date: date,
-                    note: note
+                    note: note,
+                    transport_cost: transportCost,
+                    payment_source: paymentSource,
+                    transport_source: transportSource
                 })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
-                    alert(`✓ Added ${data.bundles} bundle(s)!\n${data.sticks} sticks | Cost: R${data.cost.toFixed(2)}`);
+                    let msg = `✓ Added ${data.bundles} bundle(s)!\n${data.sticks} sticks | Total: R${data.cost.toFixed(2)}`;
+                    if (data.payment_source === 'business') {
+                        msg += '\n💰 Paid from business cash';
+                    } else {
+                        msg += '\n👤 Paid from your pocket';
+                    }
+                    alert(msg);
                     location.reload();
                 }
             })

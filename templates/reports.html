@@ -108,6 +108,17 @@
                 </div>
             </div>
         </div>
+        
+        <div class="row mb-3">
+            <div class="col-12 col-md-4 mx-auto">
+                <div class="period-tab" onclick="showPeriod('bundles')">
+                    <div class="text-center">
+                        <i class="fas fa-boxes"></i><br>
+                        <strong>Bundle Performance</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Report Content -->
         <div class="card shadow-sm">
@@ -115,15 +126,13 @@
                 <!-- Today -->
                 <div id="period-today" class="period-content">
                     <h5 class="text-warning mb-3">📅 Today's Summary</h5>
-                    {% set data = today %}
-                    {% include 'report_stats.html' %}
+                    {% include 'report_stats.html' with data=today %}
                 </div>
 
                 <!-- Yesterday -->
                 <div id="period-yesterday" class="period-content" style="display:none;">
                     <h5 class="text-warning mb-3">📅 Yesterday's Summary</h5>
-                    {% set data = yesterday %}
-                    {% include 'report_stats.html' %}
+                    {% include 'report_stats.html' with data=yesterday %}
                 </div>
 
                 <!-- This Week -->
@@ -136,15 +145,13 @@
                         </span>
                     </div>
                     {% endif %}
-                    {% set data = this_week %}
-                    {% include 'report_stats.html' %}
+                    {% include 'report_stats.html' with data=this_week %}
                 </div>
 
                 <!-- Last Week -->
                 <div id="period-lastweek" class="period-content" style="display:none;">
                     <h5 class="text-warning mb-3">📅 Last Week</h5>
-                    {% set data = last_week %}
-                    {% include 'report_stats.html' %}
+                    {% include 'report_stats.html' with data=last_week %}
                 </div>
 
                 <!-- This Month -->
@@ -157,15 +164,108 @@
                         </span>
                     </div>
                     {% endif %}
-                    {% set data = this_month %}
-                    {% include 'report_stats.html' %}
+                    {% include 'report_stats.html' with data=this_month %}
                 </div>
 
                 <!-- Last Month -->
                 <div id="period-lastmonth" class="period-content" style="display:none;">
                     <h5 class="text-warning mb-3">📅 Last Month</h5>
-                    {% set data = last_month %}
-                    {% include 'report_stats.html' %}
+                    {% include 'report_stats.html' with data=last_month %}
+                </div>
+
+                <!-- Bundles -->
+                <div id="period-bundles" class="period-content" style="display:none;">
+                    <h5 class="text-warning mb-4">📦 Bundle Performance Tracker</h5>
+                    
+                    <!-- Cash Flow Summary -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="card text-center" style="background:#1f4d1f; border-color:#4caf50;">
+                                <div class="card-body">
+                                    <small class="text-muted">Cash from Sales</small>
+                                    <h4 class="text-success mb-0">R{{ total_cash_sales }}</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-center" style="background:#1f3d4d; border-color:#2196f3;">
+                                <div class="card-body">
+                                    <small class="text-muted">Personal Injections</small>
+                                    <h4 class="text-info mb-0">+R{{ total_injections }}</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-center" style="background:#4d1f1f; border-color:#f44336;">
+                                <div class="card-body">
+                                    <small class="text-muted">Expenses</small>
+                                    <h4 class="text-danger mb-0">-R{{ total_expenses }}</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-center" style="background:#3d3520; border-color:#ffc107;">
+                                <div class="card-body">
+                                    <small class="text-muted">Net Cash</small>
+                                    <h4 class="text-warning mb-0">R{{ net_cash }}</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bundle Chart -->
+                    {% if bundle_chart_labels %}
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h6 class="text-muted mb-3">Bundle Revenue Over Time (Last 20)</h6>
+                            <div style="height:250px;">
+                                <canvas id="bundleChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Bundle List -->
+                    <h6 class="text-muted mb-3">All Bundles</h6>
+                    {% for bundle in bundles %}
+                    <div class="card mb-2">
+                        <div class="card-body py-2">
+                            <div class="row align-items-center">
+                                <div class="col-md-3">
+                                    <strong>Bundle #{{ loop.index }}</strong><br>
+                                    <small class="text-muted">{{ bundle.purchase_date.strftime('%d %b %Y') }}</small>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="progress" style="height:20px;">
+                                        <div class="progress-bar {% if bundle.progress_pct == 100 %}bg-success{% else %}bg-warning{% endif %}" 
+                                             style="width: {{ bundle.progress_pct }}%">
+                                            {{ bundle.sticks_sold }}/200
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">{{ bundle.progress_pct }}% sold</small>
+                                </div>
+                                <div class="col-md-2 text-center">
+                                    <small class="text-muted">Cash</small><br>
+                                    <strong class="text-success">R{{ bundle.cash_revenue }}</strong>
+                                </div>
+                                <div class="col-md-2 text-center">
+                                    <small class="text-muted">Credit</small><br>
+                                    <strong class="text-warning">R{{ bundle.credit_revenue }}</strong>
+                                </div>
+                                <div class="col-md-2 text-center">
+                                    <small class="text-muted">Total Rev</small><br>
+                                    <strong>R{{ bundle.total_revenue }}</strong>
+                                </div>
+                                <div class="col-md-1 text-center">
+                                    <small class="text-muted">Profit</small><br>
+                                    <strong class="{% if bundle.profit > 0 %}text-success{% else %}text-danger{% endif %}">
+                                        R{{ bundle.profit }}
+                                    </strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
@@ -188,3 +288,38 @@
     </script>
 </body>
 </html>
+
+<!-- Report Stats Template -->
+{% macro report_stats(data) %}
+<div class="stat-row">
+    <span class="text-muted"><i class="fas fa-dollar-sign"></i> Total Sales</span>
+    <strong class="text-success">R{{ data.total_sales }}</strong>
+</div>
+<div class="stat-row">
+    <span class="text-muted"><i class="fas fa-money-bill-wave"></i> Cash Sales</span>
+    <strong class="text-success">R{{ data.cash_sales }}</strong>
+</div>
+<div class="stat-row">
+    <span class="text-muted"><i class="fas fa-credit-card"></i> Credit Sales</span>
+    <strong class="text-warning">R{{ data.credit_sales }}</strong>
+</div>
+<div class="stat-row">
+    <span class="text-muted"><i class="fas fa-chart-line"></i> Net Profit</span>
+    <strong class="text-primary">R{{ data.profit }}</strong>
+</div>
+<div class="stat-row">
+    <span class="text-muted"><i class="fas fa-cigarette"></i> Sticks Sold</span>
+    <strong>{{ data.sticks_sold }}</strong>
+</div>
+<div class="stat-row">
+    <span class="text-muted"><i class="fas fa-hand-holding-usd"></i> Payments Received</span>
+    <strong class="text-info">R{{ data.payments_received }}</strong>
+</div>
+<div class="stat-row">
+    <span class="text-muted"><i class="fas fa-trophy"></i> Top Customer</span>
+    <div class="text-end">
+        <strong>{{ data.top_customer }}</strong><br>
+        <small class="text-muted">R{{ data.top_customer_amount }}</small>
+    </div>
+</div>
+{% endmacro %}

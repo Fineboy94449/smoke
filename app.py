@@ -878,13 +878,88 @@ def view_stock():
 def add_stock():
     data = request.json
     bundles = int(data['bundles'])
-    cost = bundles * BUNDLE_COST
+    stock_cost = bundles * BUNDLE_COST
+    transport_cost = float(data.get('transport_cost', 0))
+    total_cost = stock_cost + transport_cost
+    
+    payment_source = data.get('payment_source', 'personal')  # 'business' or 'personal'
+    transport_source = data.get('transport_source', 'personal')  # who paid transport
+    
     if data.get('date'):
         purchase_date = datetime.strptime(data['date'], '%Y-%m-%d').replace(tzinfo=timezone.utc)
     else:
         purchase_date = datetime.now(timezone.utc)
-    db.collection('stock').add({'bundles': bundles, 'sticks': bundles * STICKS_PER_BUNDLE, 'cost': cost, 'date': purchase_date, 'note': data.get('note', '')})
-    return jsonify({"status": "success", "bundles": bundles, "sticks": bundles * STICKS_PER_BUNDLE, "cost": cost})
+    
+    # Create individual bundle records
+    bundle_ids = []
+    for i in range(bundles):
+        bundle_doc = db.collection('bundles').add({
+            'bundle_number': i + 1,
+            'purchase_date': purchase_date,
+            'cost': BUNDLE_COST,
+            'sticks_total': STICKS_PER_BUNDLE,
+            'sticks_sold': 0,
+            'cash_revenue': 0,
+            'credit_revenue': 0,
+            'status': 'active',
+            'note': data.get('note', '')
+        })
+        bundle_ids.append(bundle_doc[1].id)
+    
+    # Add to stock collection (for backwards compatibility)
+    db.collection('stock').add({
+        'bundles': bundles,
+        'sticks': bundles * STICKS_PER_BUNDLE,
+        'cost': stock_cost,
+        'date': purchase_date,
+        'note': data.get('note', ''),
+        'payment_source': payment_source,
+        'transport_cost': transport_cost,
+        'transport_source': transport_source,
+        'bundle_ids': bundle_ids
+    })
+    
+    # Record expenses if paid from business cash
+    if payment_source == 'business':
+        db.collection('expenses').add({
+            'type': 'stock',
+            'amount': stock_cost,
+            'description': f'{bundles} bundles purchased',
+            'date': purchase_date,
+            'paid_from': 'business_cash'
+        })
+    
+    if transport_cost > 0 and transport_source == 'business':
+        db.collection('expenses').add({
+            'type': 'transport',
+            'amount': transport_cost,
+            'description': f'Transport for {bundles} bundles',
+            'date': purchase_date,
+            'paid_from': 'business_cash'
+        })
+    
+    # Record personal injection if paid from personal money
+    if payment_source == 'personal':
+        db.collection('personal_injections').add({
+            'amount': stock_cost,
+            'description': f'Personal money for {bundles} bundles',
+            'date': purchase_date
+        })
+    
+    if transport_cost > 0 and transport_source == 'personal':
+        db.collection('personal_injections').add({
+            'amount': transport_cost,
+            'description': f'Personal money for transport',
+            'date': purchase_date
+        })
+    
+    return jsonify({
+        "status": "success",
+        "bundles": bundles,
+        "sticks": bundles * STICKS_PER_BUNDLE,
+        "cost": total_cost,
+        "payment_source": payment_source
+    })
 
 @app.route('/stock/delete', methods=['POST'])
 @login_required
@@ -934,11 +1009,11 @@ def recent_transactions():
 @app.route('/reports')
 @login_required
 def view_reports():
-    """Summary reports page"""
+    """Summary reports page with bundles tab"""
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_start = today_start - timedelta(days=1)
-    week_start = today_start - timedelta(days=today_start.weekday())  # Monday
+    week_start = today_start - timedelta(days=today_start.weekday())
     last_week_start = week_start - timedelta(days=7)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     if month_start.month == 1:
@@ -990,7 +1065,6 @@ def view_reports():
             'top_customer_amount': round(top_customer[1], 2)
         }
     
-    # Get all periods
     today = get_period_data(today_start, now)
     yesterday = get_period_data(yesterday_start, today_start)
     this_week = get_period_data(week_start, now)
@@ -998,7 +1072,6 @@ def view_reports():
     this_month = get_period_data(month_start, now)
     last_month = get_period_data(last_month_start, month_start)
     
-    # Calculate comparisons
     def calc_change(current, previous):
         if previous == 0:
             return 0
@@ -1006,6 +1079,45 @@ def view_reports():
     
     week_change = calc_change(this_week['total_sales'], last_week['total_sales'])
     month_change = calc_change(this_month['total_sales'], last_month['total_sales'])
+    
+    # Bundle data
+    bundles = db.collection('bundles').order_by('purchase_date', direction=firestore.Query.DESCENDING).stream()
+    bundle_list = []
+    bundle_chart_labels = []
+    bundle_chart_cash = []
+    bundle_chart_credit = []
+    
+    for idx, b in enumerate(bundles):
+        bd = b.to_dict()
+        bd['id'] = b.id
+        
+        total_revenue = bd['cash_revenue'] + bd['credit_revenue']
+        profit = total_revenue - bd['cost']
+        progress_pct = (bd['sticks_sold'] / bd['sticks_total']) * 100
+        
+        bd['total_revenue'] = round(total_revenue, 2)
+        bd['profit'] = round(profit, 2)
+        bd['progress_pct'] = round(progress_pct, 1)
+        
+        bundle_list.append(bd)
+        
+        # Chart data (last 20 bundles)
+        if idx < 20:
+            bundle_chart_labels.insert(0, f"Bundle {idx + 1}")
+            bundle_chart_cash.insert(0, round(bd['cash_revenue'], 2))
+            bundle_chart_credit.insert(0, round(bd['credit_revenue'], 2))
+    
+    # Calculate cash flow
+    sales_all = db.collection('sales').stream()
+    total_cash_sales = sum(s.to_dict()['price'] for s in sales_all if s.to_dict().get('method') == 'cash')
+    
+    expenses_all = db.collection('expenses').stream()
+    total_expenses = sum(e.to_dict().get('amount', 0) for e in expenses_all)
+    
+    injections_all = db.collection('personal_injections').stream()
+    total_injections = sum(i.to_dict().get('amount', 0) for i in injections_all)
+    
+    net_cash = total_cash_sales + total_injections - total_expenses
     
     return render_template('reports.html',
                            today=today,
@@ -1016,6 +1128,14 @@ def view_reports():
                            last_month=last_month,
                            week_change=week_change,
                            month_change=month_change,
+                           bundles=bundle_list,
+                           bundle_chart_labels=bundle_chart_labels,
+                           bundle_chart_cash=bundle_chart_cash,
+                           bundle_chart_credit=bundle_chart_credit,
+                           total_cash_sales=round(total_cash_sales, 2),
+                           total_expenses=round(total_expenses, 2),
+                           total_injections=round(total_injections, 2),
+                           net_cash=round(net_cash, 2),
                            user=session.get('user'),
                            role=session.get('role'))
 
